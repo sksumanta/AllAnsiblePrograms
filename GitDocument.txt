@@ -104,7 +104,21 @@ what is the difference between git remote and git clone?
 		
 	git clone is used to copy or clone a different repository.
 		git clone "url-of-repository"
+
+How to git clone using password with special character?
+
+	if password  has special characters like an exclamation mark, you need to use percent encoding which is often called URL encoding.
+
 		
+		!   #   $    &   '   (   )   *   +   ,   /   :   ;   =   ?   @   [   ]
+		%21 %23 %24 %26 %27 %28 %29 %2A %2B %2C %2F %3A %3B %3D %3F %40 %5B %5D
+		
+	For example, using the credentials myuser/password! to a github repository would look like:
+
+	$ git clone https://myuser:password%21@github.com/myuser/repo.
+	
+	
+
 how to create a git project?
 	it is same as Local and Remote communication.
 
