@@ -94,7 +94,9 @@ git push -u origin master
 		* branch            master     -> FETCH_HEAD
 		Merge made by the 'recursive' strategy.
  [ujam@yamlServer focusDeploy]$
- 
+  [ujam@yamlServer focusDeploy]$   git add -A
+ [ujam@yamlServer focusDeploy]$   git commit -m "added the file"
+  [ujam@yamlServer focusDeploy]$
  [ujam@yamlServer focusDeploy]$ cd  petDev/
  [ujam@yamlServer petDev]$ git push origin master
                                    
