@@ -1,0 +1,28 @@
+
+  - name: check the group name from hosts.yaml
+    block:
+      - name: set the groupKey
+        set_fact:
+          extraGroup: [ 'ungrouped' , 'all' , 'adminserver' ]
+		  
+		  # How to get the group name from hosts.yaml
+		  
+          groupKey: "{{ groups.keys()|list }}"
+
+      - name: check the directory exist or not
+        stat:
+          path: "{{ staging.scm }}/{{ source }}"
+        register: dirStat
+
+      - name: print the group names
+        debug:
+          msg: "{{ item }}"
+        with_items: "{{ groupKey }}"
+
+	  # how to handle item not in list in ansible variable?
+	  
+      - name: print the group names not in list extraGroup
+        debug:
+          msg: "{{ item }}"
+        with_items: "{{ groupKey }}"
+        when:  item  not in  extraGroup
