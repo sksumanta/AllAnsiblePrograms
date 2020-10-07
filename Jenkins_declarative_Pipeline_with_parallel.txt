@@ -1,0 +1,633 @@
+java.lang.Boolean batchFinished = false
+pipeline {
+    agent { label 'master' }
+    options {
+        timestamps()
+        ansiColor("xterm")
+        buildDiscarder(logRotator(daysToKeepStr: '35'))
+    }
+    environment {
+        JIRA_SITE = "jira"
+        ORACLE_HOME = "/usr/local/myProject/oracle/current"
+        LD_LIBRARY_PATH = "${LD_LIBRARY_PATH}"
+        PATH = "/usr/local/myProject/ops-tools/cmPyEnv/bin:${JAVA_HOME}/bin:${ORACLE_HOME}/bin:${PATH}"
+    }
+    parameters {
+		
+        string(name: 'myDevOps_tier', defaultValue: '', description: 'myDevOps Tier')
+        string(name: 'myDevOps_domain', defaultValue: '', description: 'myDevOps Domain')
+        string(name: 'build_num', defaultValue: '', description: 'Build to Deploy')
+        string(name: 'jiraNum', defaultValue: '', description: 'Deployment Jira Ticket Number')
+        booleanParam(defaultValue: false, description: 'Deploy to App Tier', name: 'doApp')
+        booleanParam(defaultValue: false, description: 'Deploy to Batch Tier', name: 'doBatch')
+        booleanParam(defaultValue: false, description: 'Deploy to Web Tier', name: 'doWeb')
+        booleanParam(defaultValue: false, description: 'Deploy to OLTP Tier', name: 'doOLTP')
+        booleanParam(defaultValue: false, description: 'Deploy to OLAP Tier', name: 'doOLAP')
+        booleanParam(defaultValue: false, description: 'Deploy to RD Tier', name: 'doRD')
+        booleanParam(defaultValue: false, description: 'Stop scheduler during deployment', name: 'Scheduler')
+        booleanParam(defaultValue: false, description: 'Run ETL with deployment', name: 'runETL')
+        booleanParam(defaultValue: false, description: 'Stop HL7 during deployment', name: 'HL7')
+        booleanParam(defaultValue: false, description: 'Only Stage the Web Tier, all other options will be ignored', name: 'doStageWebOnly')
+    }
+    stages {
+        stage('Initialize') {
+            when {
+                allOf {
+                    expression { (myDevOps_domain?.trim()) }
+                    expression { (build_num?.trim()) }
+                }
+            }
+            steps {
+                echo "Initialize"
+                echo "Checking out SCM Files"
+                ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                playbook: "books/sourcecontrol.yaml", inventory: "inventories/local",
+                                extras: "-e tier=${myDevOps_tier} -e myDevOps_domain=${myDevOps_domain}",
+                                tags: "checkout"
+                script {
+                    currentBuild.displayName = "RUNNING ${myDevOps_domain} ${build_num}"
+                    dir("/tmp/${myDevOps_domain}/scm/${myDevOps_tier}/${myDevOps_domain}") {
+                        readData = readYaml file: "${myDevOps_domain}.yaml"
+                        connect = "${readData['batch'].techrx['olap'].id}/${readData['batch'].techrx['olap'].pwd}@${readData['myDevOps_olap_sid']}"
+                        sql = 'SET PAGESIZE 0;\nSET FEEDBACK OFF;\nSELECT IS_ACTIVE FROM TREXONE_ODS_DATA.ETL_STEP WHERE STEP_NAME=\'AUD_FF\';'
+                        sqlplus = "${ORACLE_HOME}/bin/sqlplus"
+                    }
+                }
+                script {
+                    switch (myDevOps_tier) {
+                        case "dev":
+                            jenkinsWebhook = 'https://outlook.office.com/webhook/1516dd98-6add-48bb-887d-bb6a0d74482c@da67ef1b-ca59-4db2-9a8c-aa8d94617a16/JenkinsCI/23622cc97fe34c158a2e8a592031d8bf/b111a420-aa8a-4063-87c8-62c2bc276e6f'
+                            break
+                        case "qa":
+                            jenkinsWebhook = 'https://outlook.office.com/webhook/1516dd98-6add-48bb-887d-bb6a0d74482c@da67ef1b-ca59-4db2-9a8c-aa8d94617a16/JenkinsCI/72de35420c3549099418256353fa5af0/b111a420-aa8a-4063-87c8-62c2bc276e6f'
+                            break
+                        case "stage":
+                            jenkinsWebhook = 'https://outlook.office.com/webhook/1516dd98-6add-48bb-887d-bb6a0d74482c@da67ef1b-ca59-4db2-9a8c-aa8d94617a16/JenkinsCI/caec90e1febe49cc980f6b61207f0d1d/b111a420-aa8a-4063-87c8-62c2bc276e6f'
+                            break
+                        case "uat":
+                            jenkinsWebhook = 'https://outlook.office.com/webhook/1516dd98-6add-48bb-887d-bb6a0d74482c@da67ef1b-ca59-4db2-9a8c-aa8d94617a16/JenkinsCI/caec90e1febe49cc980f6b61207f0d1d/b111a420-aa8a-4063-87c8-62c2bc276e6f'
+                            break
+                        case "prod":
+                            jenkinsWebhook = 'https://outlook.office.com/webhook/1516dd98-6add-48bb-887d-bb6a0d74482c@da67ef1b-ca59-4db2-9a8c-aa8d94617a16/JenkinsCI/540d217dd8a842609eb8271b9e43b8b2/b111a420-aa8a-4063-87c8-62c2bc276e6f'
+                            break
+                        case "ptlab":
+                            jenkinsWebhook = 'https://outlook.office.com/webhook/c397ccf6-4a5e-4413-8386-52a57f26177c@da67ef1b-ca59-4db2-9a8c-aa8d94617a16/JenkinsCI/ac6aaadfde714878bef431ce30e22cf7/b111a420-aa8a-4063-87c8-62c2bc276e6f'
+                            break
+                        default:
+                            jenkinsWebhook = ''
+                            break
+                    }
+                }
+                office365ConnectorSend message: "Deployment: ${jiraNum} - ${readData['myDevOps_name']} - ${myDevOps_domain} - ${build_num}",
+                                       status: "Started",
+                                       color: "FFFF00",
+                                       webhookUrl: "${jenkinsWebhook}"
+            }
+        }
+        stage('Stage Web Only') {
+            when {
+                beforeAgent true
+                expression { doStageWebOnly.toBoolean() == true }
+            }
+            steps {
+                script {
+                    echo "Enter Stage Web Only Step"
+                    echo "Staging Web Only"
+                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                    extras: "-e stage_web_only=true -e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                    tags: "stage-web"
+                }
+            }
+        }
+        stage('Disable Batch Scheduler') {
+            when {
+                beforeAgent true
+                expression { doStageWebOnly.toBoolean() == false }
+                expression { Scheduler.toBoolean() == true }
+            }
+            steps {
+                echo "Enter Scheduler Step"
+                script {
+                    echo "Disabling Batch Jobs"
+                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                    playbook: "scheduler.yaml", inventory: "inventories/${myDevOps_tier}",
+                                    extras: "-e myDevOps_domain=${myDevOps_domain} ",
+                                    tags: "stop-jobs"
+                    echo "Disabling ETL Jobs"
+                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                    playbook: "scheduler.yaml", inventory: "inventories/${myDevOps_tier}",
+                                    extras: "-e myDevOps_domain=${myDevOps_domain} ",
+                                    tags: "stop-etl"
+                    if (jiraNum != '') {
+                        jiraAddComment idOrKey: "${jiraNum}", comment: 'Batch Scheduler Disabled'
+                    }
+                }
+            }
+        }
+        stage('Pre-Stage Process') {
+            when {
+                beforeAgent true
+                expression { doStageWebOnly.toBoolean() == false }
+                expression { (doBatch.toBoolean() == true) }
+            }
+            steps {
+                script {
+                    if (doBatch.toBoolean()) {
+                        echo "Rebuilding domain yaml from latest template"
+                        if (jiraNum != '') {
+                            jiraAddComment idOrKey: "${jiraNum}", comment: 'Batch Tier Started'
+                        }
+                        ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                        playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                        extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                        tags: "pre-stage-batch"
+                    } else {
+                        echo "Skipping Batch Tier: Not Selected"
+                    }
+                }
+            }
+        }
+        stage('Staging Process') {
+            when {
+                beforeAgent true
+                expression { doStageWebOnly.toBoolean() == false }
+                expression { (doApp.toBoolean() == true) || (doWeb.toBoolean() == true) || (runETL.toBoolean() == true) || (doBatch.toBoolean() == true) || (doOLTP.toBoolean() == true) || (doOLAP.toBoolean() == true) }
+            }
+            steps {
+                parallel (
+                        App: {
+                            echo "Enter App Step"
+                            script {
+                                if (doApp.toBoolean()) {
+                                    echo "Staging App"
+                                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                                    extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                                    tags: "stage-app"
+                                } else {
+                                    echo "Skipping App Tier: Not Selected"
+                                }
+                            }
+                        },
+                        Web: {
+                            script {
+                                echo "Enter Web Step"
+                                if (doWeb.toBoolean()) {
+                                    echo "Staging Web"
+                                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                                    extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                                    tags: "stage-web"
+                                } else {
+                                    echo "Skipping Web Tier: Not Selected"
+                                }
+                            }
+                        },
+                        "Run ETL": {
+                            echo "Enter Run ETL Step"
+                            node("batch") {
+                                script {
+                                    if (runETL.toBoolean()) {
+                                        echo "Running ETL Jobs"
+                                        if (jiraNum != '') {
+                                            jiraAddComment idOrKey: "${jiraNum}", comment: 'ODS Started'
+                                        }
+                                        echo "Starting ODS"
+                                        odsRet = sh script: "/usr/local/trexone/BATCH/runBatch.sh ${readData["myDevOps_name"]} 'ETLStep.sh ODS'", returnStdout: true
+                                        echo "ODS Completed"
+                                        if (jiraNum != '') {
+                                            jiraAddComment idOrKey: "${jiraNum}", comment: 'ODS Completed'
+                                        }
+                                    } else {
+                                        echo "Skipping ETL: Not Selected"
+                                    }
+                                }
+                            }
+                        },
+                        "Batch": {
+                            echo "Enter Batch Step"
+                            script {
+                                if (doBatch.toBoolean()) {
+                                    echo "Staging Batch"
+                                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                                    extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                                    tags: "stage-batch"
+                                } else {
+                                    echo "Skipping Batch Tier: Not Selected"
+                                }
+                            }
+                        },
+                        "Stage DB": {
+                            echo "Enter Stage DB Step"
+                            script {
+                                if (doOLTP.toBoolean() || doOLAP.toBoolean()) {
+                                    echo "Staging DB Tier"
+                                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                                    extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                                    tags: "stage-db"
+                                } else {
+                                    echo "Skipping DB Tier: Not Selected"
+                                }
+                            }
+                        }
+                )
+            }
+        }
+        stage('Shutdown App Servers') {
+            when {
+                beforeAgent true
+                expression { doStageWebOnly.toBoolean() == false }
+                expression { (doApp.toBoolean() == true) || (doOLTP.toBoolean() == true) }
+            }
+            steps {
+                echo "Enter App Shutdown Step"
+                script {
+                    echo "Stopping App Servers"
+                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                    extras: "-e myDevOps_domain=${myDevOps_domain} ",
+                                    tags: "stop-app"
+                    if (jiraNum != '') {
+                        jiraAddComment idOrKey: "${jiraNum}", comment: 'App Servers Shutdown'
+                    }
+                }
+            }
+        }
+        stage('Deployment Process') {
+            when {
+                beforeAgent true
+                expression { doStageWebOnly.toBoolean() == false }
+                expression { (doApp.toBoolean() == true) || (doWeb.toBoolean() == true) || (doBatch.toBoolean() == true) || (runETL.toBoolean() == true) || (doOLTP.toBoolean() == true) }
+            }
+            steps {
+                parallel (
+                        App: {
+                            echo "Enter App Step"
+                            script {
+                                if (doApp.toBoolean()) {
+                                    echo "Deploying App Tier"
+                                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                                    extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                                    tags: "deploy-app"
+                                    echo "App Tier Completed"
+                                    if (jiraNum != '') {
+                                        jiraAddComment idOrKey: "${jiraNum}", comment: 'App Tier Completed'
+                                    }
+                                } else {
+                                    echo "Skipping App Tier: Not Selected"
+                                }
+                            }
+                        },
+                        Web: {
+                            script {
+                                echo "Enter Web Step"
+                                if (doWeb.toBoolean()) {
+                                    echo "Deploying Web Tier"
+                                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                                    extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                                    tags: "deploy-web"
+                                    echo "Web Tier Completed"
+                                    if (jiraNum != '') {
+                                        jiraAddComment idOrKey: "${jiraNum}", comment: 'Web Tier Completed'
+                                    }
+                                } else {
+                                    echo "Skipping Web Tier: Not Selected"
+                                }
+                            }
+                        },
+                        "Batch": {
+                            echo "Enter Deploy Batch Step"
+                            script {
+                                if (doBatch.toBoolean()) {
+                                    echo "Deploying Batch"
+                                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                                    extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                                    tags: "deploy-batch"
+                                    batchFinished = true
+                                    echo "Batch Tier Completed"
+                                    if (jiraNum != '') {
+                                        jiraAddComment idOrKey: "${jiraNum}", comment: 'Batch Tier Completed'
+                                    }
+                                } else {
+                                    echo "Skipping Batch Tier: Not Selected"
+                                }
+                                batchFinished = true
+                            }
+                        },
+                        "Run ETL": {
+                            echo "Enter Run ETL Step"
+                            node("batch") {
+                                script {
+                                    if (runETL.toBoolean()) {
+                                        echo "Running ETL Jobs"
+                                        echo "ETL waiting for completion of Batch Tier Deployment"
+                                        waitUntil {
+                                            batchFinished
+                                        }
+                                        if (jiraNum != '') {
+                                            jiraAddComment idOrKey: "${jiraNum}", comment: 'AUD Started'
+                                        }
+                                        echo "Starting AUD"
+                                        audRet = sh script: "/usr/local/trexone/BATCH/runBatch.sh ${readData["myDevOps_name"]} 'ETLStep.sh AUD'", returnStdout: true
+                                        echo "AUD Completed"
+                                        if (jiraNum != '') {
+                                            jiraAddComment idOrKey: "${jiraNum}", comment: 'AUD Completed'
+                                        }
+                                        echo "Verifing if AUD_FF is enabled"
+                                        isAudFF = sh script: "set +x\necho -e \"${sql}\" | ${sqlplus} -S ${connect}", returnStdout: true
+                                        if (isAudFF == "Y") {
+                                            echo "Starting AUD_FF"
+                                            if (jiraNum != '') {
+                                                jiraAddComment idOrKey: "${jiraNum}", comment: 'AUD_FF Started'
+                                            }
+                                            echo "AUD_FF is Enabled"
+                                            audffRet = sh script: "/usr/local/trexone/BATCH/runBatch.sh ${readData["myDevOps_name"]} 'ETLStep.sh AUD_FF'", returnStdout: true
+                                            echo "AUD_FF Completed"
+                                            if (jiraNum != '') {
+                                                jiraAddComment idOrKey: "${jiraNum}", comment: 'AUD_FF Completed'
+                                            }
+                                        }
+                                        if (jiraNum != '') {
+                                            jiraAddComment idOrKey: "${jiraNum}", comment: 'DW Started'
+                                        }
+                                        echo "Starting DW"
+                                        dwRet = sh script: "/usr/local/trexone/BATCH/runBatch.sh ${readData["myDevOps_name"]} 'ETLStep.sh DW'", returnStdout: true
+                                        echo "DW Completed"
+                                        if (jiraNum != '') {
+                                            jiraAddComment idOrKey: "${jiraNum}", comment: 'DW Completed'
+                                        }
+                                    } else {
+                                        echo "Skipping ETL: Not Selected"
+                                    }
+                                }
+                            }
+                        },
+                        "Deploy OLTP": {
+                            echo "Enter Deploy OLTP Step"
+                            script {
+                                if (doOLTP.toBoolean()) {
+                                    echo "OLTP waiting for completion of ODS run"
+                                    echo "Deploying DB Tier - OLTP"
+                                    if (jiraNum != '') {
+                                        jiraAddComment idOrKey: "${jiraNum}", comment: 'DB Tier Started - OLTP'
+                                    }
+                                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                                    extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                                    tags: "deploy-oltp"
+                                    echo "DB Tier Completed - OLTP"
+                                    if (jiraNum != '') {
+                                        jiraAddComment idOrKey: "${jiraNum}", comment: 'DB Tier Completed - OLTP'
+                                    }
+                                } else {
+                                    echo "Skipping OLTP Tier: Not Selected"
+                                }
+                            }
+                        }
+                )
+            }
+            post {
+                success {
+                    office365ConnectorSend message: "Main Deployment: ${jiraNum} - ${readData['myDevOps_name']} - ${myDevOps_domain} - ${build_num}",
+                                           status: "${currentBuild.currentResult}",
+                                           color: "008000",
+                                           webhookUrl: "${jenkinsWebhook}"
+                }
+                failure {
+                    office365ConnectorSend message: "Main Deployment: ${jiraNum} - ${readData['myDevOps_name']} - ${myDevOps_domain} - ${build_num}",
+                                           status: "${currentBuild.currentResult}",
+                                           color: "FF0000",
+                                           webhookUrl: "${jenkinsWebhook}"
+                }
+                always {
+                    script {
+                        if (doApp.toBoolean() || doBatch.toBoolean() || doWeb.toBoolean() || doOLTP.toBoolean()) {
+                            echo "End Main Deployment Steps"
+                            if (jiraNum != '') {
+                                jiraAddComment idOrKey: "${jiraNum}", comment: "Main Deployment: ${currentBuild.currentResult}\nDuration: " + "${currentBuild.durationString.replace(' and counting', '')}"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        stage('Enable Batch Scheduler') {
+            when {
+                beforeAgent true
+                expression { doStageWebOnly.toBoolean() == false }
+                expression { Scheduler.toBoolean() == true }
+            }
+            steps {
+                echo "Enter Scheduler Step"
+                script {
+                    echo "Enabling Batch Scheduler - Jobs"
+                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                    playbook: "scheduler.yaml", inventory: "inventories/${myDevOps_tier}",
+                                    extras: "-e myDevOps_domain=${myDevOps_domain}",
+                                    tags: "start-jobs"
+                    if (jiraNum != '') {
+                        jiraAddComment idOrKey: "${jiraNum}", comment: 'Enabled Batch Scheduler - Jobs'
+                    }
+                }
+            }
+        }
+        stage('Start App') {
+            when {
+                beforeAgent true
+                expression { doStageWebOnly.toBoolean() == false }
+                expression { (doApp.toBoolean() == true) || (doOLTP.toBoolean() == true) }
+            }
+            steps {
+                echo "Enter Start App"
+                script {
+                    echo "Starting App Servers"
+                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                    extras: "-e myDevOps_domain=${myDevOps_domain}",
+                                    tags: "start-app"
+                    if (jiraNum != '') {
+                        jiraAddComment idOrKey: "${jiraNum}", comment: 'Started App Servers'
+                    }
+                    echo "Checking App Server Response"
+//                    httpRequest consoleLogResponseBody: true, ignoreSslErrors: true, timeout: 30, url: "http://abrams-admin.myProject.ndchealth.com:15200/${myDevOps_domain}/TRexOneWeb/status", validResponseContent: "${build_num}"
+                }
+            }
+        }
+        stage('OLAP & RD Deployment') {
+            when {
+                beforeAgent true
+                expression { doStageWebOnly.toBoolean() == false }
+                expression { (doOLAP.toBoolean() == true) || (doRD.toBoolean() == true) }
+            }
+            steps {
+                parallel (
+                        OLAP: {
+                            echo "Enter Deploy OLAP Step"
+                            script {
+                                if (doOLAP.toBoolean()) {
+                                    echo "Deploying DB Tier - OLAP"
+                                    if (jiraNum != '') {
+                                        jiraAddComment idOrKey: "${jiraNum}", comment: 'DB Tier Starting - OLAP'
+                                    }
+                                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                                    playbook: "deploybuild.yaml", inventory: "inventories/${myDevOps_tier}",
+                                                    extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                                    tags: "deploy-olap"
+                                    echo "DB Tier Completed - OLAP"
+                                    if (jiraNum != '') {
+                                        jiraAddComment idOrKey: "${jiraNum}", comment: 'DB Tier Completed - OLAP'
+                                    }
+                                } else {
+                                    echo "Skipping OLAP Tier: Not Selected"
+                                }
+                            }
+                        },
+                        RD: {
+                            script {
+                                echo "Enter Deploy RD Step"
+                                if (doRD.toBoolean()) {
+                                    office365ConnectorSend message: "RD Deployment: ${jiraNum} - ${readData['myDevOps_name']} - ${myDevOps_domain} - ${build_num}",
+                                                           status: "Started",
+                                                           color: "FFFF00",
+                                                           webhookUrl: "${jenkinsWebhook}"
+                                    if (jiraNum != '') {
+                                        jiraAddComment idOrKey: "${jiraNum}", comment: 'RD Tier Started'
+                                    }
+                                    echo "Staging RD"
+                                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                                    playbook: "deployrd.yaml", inventory: "inventories/${myDevOps_tier}",
+                                                    extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                                    tags: "stage-rd"
+                                    echo "Deploying RD"
+                                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                                    playbook: "deployrd.yaml", inventory: "inventories/${myDevOps_tier}",
+                                                    extras: "-e myDevOps_domain=${myDevOps_domain} -e build_num=${build_num}",
+                                                    tags: "deploy-rd"
+                                    echo "RD Tier Completed"
+                                    if (jiraNum != '') {
+                                        jiraAddComment idOrKey: "${jiraNum}", comment: 'RD Tier Completed'
+                                    }
+                                } else {
+                                    echo "Skipping RD Tier: Not Selected"
+                                }
+                            }
+                        }
+                )
+            }
+            post {
+                success {
+                    office365ConnectorSend message: "Secondary Deployment: ${jiraNum} - ${readData['myDevOps_name']} - ${myDevOps_domain} - ${build_num}",
+                                           status: "${currentBuild.currentResult}",
+                                           color: "008000",
+                                           webhookUrl: "${jenkinsWebhook}"
+                }
+                failure {
+                    office365ConnectorSend message: "Secondary Deployment: ${jiraNum} - ${readData['myDevOps_name']} - ${myDevOps_domain} - ${build_num}",
+                                           status: "${currentBuild.currentResult}",
+                                           color: "FF0000",
+                                           webhookUrl: "${jenkinsWebhook}"
+                }
+                always {
+                    script {
+                        if (doOLAP.toBoolean() || doRD.toBoolean()) {
+                            echo "End Secondary Deployment Steps"
+                            if (jiraNum != '') {
+                                jiraAddComment idOrKey: "${jiraNum}", comment: "Secondary Deployment: ${currentBuild.currentResult}\nDuration: " + "${currentBuild.durationString.replace(' and counting', '')}"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        stage('Enable ETL Jobs') {
+            when {
+                beforeAgent true
+                expression { doStageWebOnly.toBoolean() == false }
+                expression { Scheduler.toBoolean() == true }
+            }
+            steps {
+                echo "Enter Enable ETL Jobs Step"
+                script {
+                    echo "Enabling Batch Scheduler - ETL"
+                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                    playbook: "scheduler.yaml", inventory: "inventories/${myDevOps_tier}",
+                                    extras: "-e myDevOps_domain=${myDevOps_domain}",
+                                    tags: "start-etl"
+                    if (jiraNum != '') {
+                        jiraAddComment idOrKey: "${jiraNum}", comment: 'Enabled Batch Scheduler - ETL'
+                    }
+                }
+            }
+        }
+        stage('Cleanup') {
+            when {
+                beforeAgent true
+                expression { doStageWebOnly.toBoolean() == false }
+            }
+            steps {
+                echo "Enter Cleanup"
+                script {
+                    echo "Cleaning Up"
+                    ansiblePlaybook installation: "ansible", colorized: true, forks: 15, sudoUser: null,
+                                    playbook: "cleanup.yaml", inventory: "inventories/${myDevOps_tier}",
+                                    extras: "-e myDevOps_domain=${myDevOps_domain}",
+                                    tags: "cleanup"
+                }
+            }
+        }
+    }
+    post {
+        success {
+            script {
+                currentBuild.displayName = "${myDevOps_domain} ${build_num} SUCCESS"
+            }
+            office365ConnectorSend message: "Deployment: ${jiraNum} - ${readData['myDevOps_name']} - ${myDevOps_domain} - ${build_num}",
+                                   status: "${currentBuild.currentResult}",
+                                   color: "008000",
+                                   webhookUrl: "${jenkinsWebhook}"
+        }
+        failure {
+            script {
+                currentBuild.displayName = "${myDevOps_domain} ${build_num} FAILURE"
+            }
+            office365ConnectorSend message: "Deployment: ${jiraNum} - ${readData['myDevOps_name']} - ${myDevOps_domain} - ${build_num}",
+                                   status: "${currentBuild.currentResult}",
+                                   color: "FF0000",
+                                   webhookUrl: "${jenkinsWebhook}"
+        }
+        unstable {
+            script {
+                currentBuild.displayName = "${myDevOps_domain} ${build_num} UNSTABLE"
+            }
+        }
+        aborted {
+            script {
+                currentBuild.displayName = "${myDevOps_domain} ${build_num} ABORTED"
+            }
+        }
+        always {
+            script {
+                if (doStageWebOnly.toBoolean() == false) {
+                    dir("/usr/local/myDevOpslogs/${myDevOps_domain}/deployments/${build_num}") {
+                        archiveArtifacts allowEmptyArchive: true, artifacts: "**/console*.txt", fingerprint: true
+                        if (currentBuild.currentResult == "FAILURE") {
+                            if (jiraNum != '') {
+                                jiraAddComment idOrKey: "${jiraNum}", comment: "Deployment Completed: ${currentBuild.currentResult}\nDuration: " + "${currentBuild.durationString.replace(' and counting', '')}"
+                            }
+                        } else if (currentBuild.currentResult == "SUCCESS") {
+                            if (jiraNum != '') {
+                                jiraAddComment idOrKey: "${jiraNum}", comment: "Deployment Completed: ${currentBuild.currentResult}\nDuration: " + "${currentBuild.durationString.replace(' and counting', '')}"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
