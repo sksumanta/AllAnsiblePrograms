@@ -35,7 +35,7 @@ all:
     control:
       hosts:
         192.168.33.60:
-           #ansible_python_interpreter: /usr/bin/python3  # if you want to run anusible playbook with pyhon3 instade of python2 you can uncomment this 
+           #ansible_python_interpreter: /usr/bin/python3  # if you want to run anusible playbook with pyhon3 instade of python2  or  use the var directory in your role
     jenkinsmaster:
       hosts:
         192.168.33.95:
@@ -50,10 +50,26 @@ all:
     linux:
       children:
         jenkinsmaster:
-        yamlnodes:
+        yamlnodes:     
   #linux:
   #   var:
        #ansible_python_interpreter: /usr/bin/python3  # if you want to run anusible playbook with pyhon3 instade of python2 you can uncomment this 
+ =====================================================================
+ 
+       
+# if you want to run anusible playbook with pyhon3 instade of python2         
+ ===================================================================== 
+ 
+ roles      
+   └── vars
+    └── main.yml
+  
+  vi vars/main.yml
+  
+  ---                                                                                                                                                                        
+    # vars file for XXXX
+    ansible_python_interpreter: /usr/bin/python3
+    
 =======================================
 
 
