@@ -15,6 +15,13 @@ What is the difference between git and github?
 what are other version control system?
 	SVN 
 
+What Branching starategy you follow?
+
+	master Branch -------->  dev Branch
+				  |-------- feature1 Branch |___ merge to Dev Branch --- Unit test , code coverage ,security or compliance issues 
+				  |-------- feature2 Branch |                                  |_____ if success   dev code   merge to   staging branch   same test contucted
+														|____ if success code merge to master branch
+														           |___create release branch for releases 
 How to create user and email id  in git?
 	sudo su -
 	useradd -m -s /bin/bash rama
