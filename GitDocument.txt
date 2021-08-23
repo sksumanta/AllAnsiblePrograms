@@ -13,7 +13,7 @@ What is the difference between git and github?
 	Github is the web/host service to git repository. 
 
 what are other version control system?
-	SVN 
+	SVN , Beanstalk , GitLab
 
 What Branching starategy you follow?
 
