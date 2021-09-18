@@ -13,3 +13,37 @@ pipeline {
         }
     }
 }
+
+
+
+                                OR
+
+
+
+
+										
+	pipeline {
+		agent { 
+			label 'master' 
+		}
+		options {
+			timestamps()
+			//ansiColor('xterm')
+			buildDiscarder(logRotator(daysToKeepStr: '35'))
+		}
+		environment {
+			//ws = "${env.WORKSPACE}"
+			JOB_TIME = sh (returnStdout: true, script: "date '+%A %W %Y %X'").trim()
+		}
+		
+		stages{
+			stage(valueOfEnvVars){
+				steps{
+					script{
+					sh "echo print the timestamps  ${JOB_TIME} "
+					}
+				}
+			}
+		}
+		
+	}    
