@@ -1,0 +1,48 @@
+node('linuxAgent1'){
+	//Get Artifactory server instance, defined in the Artifactory Plugin administration page.	
+	
+	def arServer = Artifactory.new Server url: "https://artlfactorydev.mycompany.ca/artrfactory , credent1alsId:  sumanta_test
+	
+	//def arServer = Artifactory.newServer 'ACG Artifaclo1y_server_id', credentialsld: "Artifactory_Dev"
+	
+	// Create an Artifactory Maven instance.
+	def rtMaven = Artifactory. newMavenBuild() 
+	def buildinfo
+	
+	stage('Clone sources code') 
+	{ 
+		cleanWs()
+		git branch: 'master', url: "https://ssahooOca:Techcafesolution%401@qithub.mycompany.ca/ACG/focusJfrogXray.qit "
+	}
+	
+	stage('Artifactory configuration') 
+	{
+		// Tool name from Jenkins configuration
+		rtMaven.tool = "Maven 3.6.111
+		// Set Artifactory repositories for dependencies resolution and artifacts deployment.
+		rtMaven.deployer releaseRepo: 'libs-release-local', snapshotRepo:'libs-snapshot-local', server:  arServer
+		rtMaven.resolver releaseRepo:'libs-release', snapGhotRepo:' libs-snapshot', server : arServer	
+	}
+	
+	stage('Maven build') 
+	{
+		buildlnfo = rtMaven.run pom: 'simple-java-maven-app/pom.xm l', goals: 'clean install'
+	}
+	
+	stage('Publish build info') 
+	{ 
+		arServer.publishBuildlnfo  buildlnfo
+	}
+	stage('xray scan')
+	{ 
+		def scanConfig = [
+			'buildName'		: buildlnfo.name, 
+			'buildNumber'	: buildlnfo.number, 
+			'failBuild'	:false
+		]
+		def scanResult = arServer.xrayScan scanConfig
+		//echo scanResult as String 
+		print scanResult
+	
+	}
+}
