@@ -1,0 +1,34 @@
+
+
+ebs snapshot ----- write python code to take snapshot from ec2 instance 
+
+
+https://arfplayer.com/      try the software from this website once Shesh Nath Tiwari 
+
+https://arfplayer.com/how-to-download-and-install-arf-player/
+
+how to setup aws landing zone?
+how Elastic IP is different from Static IP Addess?
+difference between policy and role?
+difference between efs and ebs ?
+difference between fxs 
+what is cold storage in s3
+how to map s3 to ec2
+
+if one is windows and linux it willl be smb  ?
+
+if ans is SMB then what is the better choice EFS or FXS  ?
+
+how to restrict s3 access only to team or Group ?
+
+as per The pricing you shown EFS is better than EBS, and S3 is better than EFS, 
+then when should I choose which one well ?
+
+how about load balancing, when i deploy my application in EC2 ?
+
+IS EFS region wise 
+
+if we block the public access, then how can the specific group of people alone access that?
+
+s3 glacier
+
