@@ -1,0 +1,607 @@
+
+What is the resource limitation by derfault for running containers?
+
+where container vertualizatoin happens?
+ in OS level
+
+Using linux Cgroups, namespace to create separate env , how to see it ?
+does each cgroup limit a specific resource?e.g. cgroup 1 for cpu, cgroup2 for memory?
+		yes
+what is docker ?
+		its a runtime engine for containers
+Different container engine?
+		Podman
+		rocket
+
+What about mesos?
+
+network status of your system?
+	install  net-tools 
+	command is netstat -nlpt
+	
+why k8 if docker is there?
+
+can we define quota or resource limits for containers?
+	
+Can we interact with container on master, using docker client on worker1?
+
+
+API server ? ---> user put and get resource from k8 
+
+Scheduler ? ----> responsible to create container in best suit worker node.
+
+Controller manager ? ----> Manage all resource of container and worker node up and running.
+
+cloud Controller manager ? ----> 
+
+etcd ---> 
+
+kublet ---> it is and agent at worker nodes which check the container runtime ( docker ) is running or not in cluster.
+			the hart bit send to controller.
+
+kubectl ----> it is the command lines which communicate to k8 master's API server.
+
+kube proxy ---> 
+
+pods ---> 	
+
+kubeadm ---> it is the command using it you can create master and worker node 
+
+pki folder ----> get the certificates 
+
+sudo hostnamectl set-hostname master.example.com
+
+
+Authnetication between api server and user
+
+	./kube/config
+
+what is the version of k8 in your system.
+
+how to get the nodes 
+	kubectl get nodes
+how to get detail of the node
+	kubectl describe node_name
+how to get the configuration detail to know the which cluster running.
+	kubectl config view
+To know the deatil about the cluster
+	kubectl cluster-info
+	
+how to get complet data from etcd ( it help to support team to fix k8 issue without give them k8 cluster access )
+	kubectl cluster-info dump > /tmp/dump
+	
+how to delete node
+	kubectl delete node node_name
+
+how to get api version ?
+	kubectl explain	node.apiVersion
+	
+How to join the worker node from master ( not useing kubeadm join )
+	using manifast file
+	---------------------
+	mkdir cluster-adm
+	cd cluster-adm
+	vi nodereg.json
+		{
+		"kind": "Node",
+		"apiVersion": "v1",
+		"metadata": {
+			"name": "worker-node-2.example.com",
+			"lebels": {
+				"name": "worker-2"
+			}
+		}
+		}
+		
+	kubectl apply -f nodereg.json
+
+How to konw the detail about the etcd , imageRepos etc.
+	
+	kubeadm config print init-default
+
+All the k8 certificates present in below path
+	ls /etc/kubernetes/pki 
+
+how to know th exparidate of certificates
+	sudo kubeadm certs check-expiration
+
+How to manage the cluster?
+	kubeadm
+	
+How to create k8 dashboard?
+
+What is the difference between cluster_ip and nodeport?
+
+What is etcd?
+		it is non relational database keeps key value pair to store pod details.
+so pod name should be uniq.
+
+how to take backup of etcd?
+	using etcd-client
+Why to take backup of etcd?
+	if master goes down then you can restore it.
+	
+why upgrade cluster?
+	To get more features
+
+How to take etcd backup?
+
+How to get apiVersion in k8?
+
+How to check the available upgrade version
+	kubeadm upgrade plan
+
+How to list of supported resources in k8?
+	kubectl api-resources 
+
+what and why is pod?
+	k8 only manage pod but not container directly.
+	it will help to provide proper security , monitoring , logging to the application.
+	Also these can share the storage and data easily.
+	if any one of the resource container stops working, kubernetes will consider pod is not in running state.
+
+How to know what are the fileds needed in pod?
+	kubectl explain pod    ( you will get the apiversion  for pod)
+
+explain the spec ?
+	kubectl explain pod.spec.containers
+
+why to use kubectl apply ?
+	kubectl apply use to creates and updates resources in a cluster.
+				https://kubernetes.io/docs/reference/kubectl/cheatsheet/  
+				
+how to create a pod?
+	kubectl apply -f manifast_file
+	
+	ex manifast_file -->
+		
+		apiVersion: v1
+		kind: Prod
+		metadata:
+			name: nginx
+		spec:
+			containers:
+			- name: nginx
+			  image: nginx:1.14.2
+			  ports:
+			  - containerPort: 80
+
+how to watch the pods?
+	kubctl get pods -w  to watch
+
+how to know the pod run in which host / how to get the pod ip address?
+	kubectl get pods -o wide
+	
+how to know the deatil events and lifecycle about the pod?
+	kubectl describe pods name_of_pod
+
+How to delete the pod?
+	kubectl delete pod
+	
+what is the version use in deployment?
+	kubctl explain deploy.Apiversion
+	
+why init container in pod?
+	Let think there is some media file in S3 bucket.
+	once we download the media using a container and then the main container will start.
+	once main container start then it complete the media download container.
+	
+	
+	Real time example --->  DB ( check pod running or not )--- app ( check pod running or not ) --- web 
+How to block the container to user specific memory and cpu.
+	resources is the block where we specify it 
+		
+		resources:
+			requests:
+				
+How to crate a pod bypassing the Apiserver and run it in kubelet ?
+
+	create the pod yaml file in manifast folder.
+	
+	cd /etc/kubernetes/manifast
+		vi mypordyaml
+		
+how to access a pord?
+	kubectl exec 
+
+why deployment in k8?
+	deployment is a control method.
+	
+	It use to create identical multiple pods.
+	if you update the yaml and use deployment to update the pods / container in pods.
+	old pod will not deleted if the new change in yaml create a successful pod
+	
+	so for this we need replicas and template
+	
+	kubctl explain deploy
+
+How to get all deployment?
+	kubctl get deploy
+
+how to get the history of deployment?
+
+	kubctl rollout history deploy/nginx-deploy
+
+How to delete a revision?
+		
+	
+how to scaling the pod?
+	in scaling the history of deployment is not change.
+	
+How to see the ReplicaSet ( rs ) created by the Deployment?
+	kubectl get rs
+
+update the image from command line in k8 ( canery deployment )?
+	kubctl set image
+	kubctl set image deployment/nginx-dep nginx=nginx:1.16.1
+
+Two type of deployment  in k8?
+
+	kubectl explain deploy.spec.strategy.type
+		recreate ( blue green )and rolloutbuind ( canery )
+
+How to start a stoped container in a pod?
+	not posible in k8 
+	
+why DaemonSet?
+	A DaemonSet ensures that all eligible nodes run a copy of a Pod.
+
+Who create DaemonSet?
+	control manager
+
+How to see the DaemonSet?
+
+	kubectl get ds -A
+
+ELK, EFK, FluentD
+
+why job?
+	one time execution and then competed state
+	ex -- db backup , add table 
+How to check the job
+	kubectl get jobs
+	
+how to check the cron job in k8?
+	kubectl get cronjobs
+	
+env --> it use to keep the property for the container  in k8
+
+what is configmap?
+
+	it will store in etcd
+
+how to acces the configmap property in application?
+	
+what is difference between env and configmap
+
+kubectl explain pod.spec.containers.env.valueFrom --recursive
+
+cm-reloader --> the plugin use to change in configmap will update the pod 
+
+why secret?
+
+why label?
+
+how to add label to node / pod ?
+
+how to remve the label?
+	kubectl label node worker-2 labelKey-  # at the end there will be a hypen 
+	
+differnece between label and matchlabel?
+
+what is selecter?
+
+What is namespace?
+
+How to add the pod in namespace?
+	kubctl apply -f abc.yml -n namespace_name
+
+
+role base access in namespace?
+
+How to set resource quota in namespace?
+
+How to decometion an application in k8?
+	kubectl delete namespace_name
+	
+why scheduling?
+
+
+why master node not allowing scheduler to create pod in master?
+	Taints is a label which does it
+	To overcome from this we can use "tolerations" in yaml file with effect: NoSchedule
+
+	Taints is a node property and tolerations is a pod property.
+	
+How to remove Taints ?
+
+	kubectl taint nodes node_name app=example:NoSchedule-
+
+when you want to dediate specific group of nodes for the pods?
+	taints and tolerations
+	
+How to get all the resource of namespace?
+	kubctl get all -n namespace_name
+
+see list of revison of my deployment?
+
+Node affinity ---> what is the difference between NoSchedule and NoExecute?
+
+what is podAffinity and pod antiAffinity?
+
+underlay network?
+	ping command use underlay network.
+
+overlay network / CNI container network interface?
+	cNI use overlay network.
+	
+	kubctl apply -f cni_link
+
+where is k8 dns / kube-dns ?	
+	k get svc -n kube-system
+
+Note --> service , deployment and ns are logical layers.
+
+why service? ( service discovery)
+
+	when there is change in prod then new pod is created
+with new ip address. 
+	By using the selector the service come to know its pods ( pod label)
+service is not changing. 
+	For that reasion we use service.
+
+service port and pod port connected through target port.
+
+service type?
+	cluserip , nodeport , loadbalncer , ingress 
+
+
+where you get the service_cluster_ip range? where is service ip network range ?
+
+	/etc/kubernetes/manifast/kube-apiserver
+
+how service know to diract traffic to the pod?
+	
+	using endpoints (which is created by service.)
+	
+	kubctl get ep pod_name -n namespace_name
+	
+How Load balance happens in service?
+	using endpoints
+
+How to create a service?
+	kubectl expose
+	
+	kubectl expose deployment orders_app --name orders --port 80 --target-port 8080
+	
+	
+what is internal LB?
+	cluster_ip is the internal LB 
+	
+	ex-->database no need to expose outside world.
+	
+what is nodePort?
+	NodePort is a port mapping where a port will be open.
+	it is cluster based communication.
+	
+	ex--> access app using comany interact  ( jira , jenkins , git etc )
+	
+What is Load balancer?
+	when app is expose to the outside world is use load balancer.
+	
+how to change clusterip to nodePort?
+	
+	kubectl expose deployment mysql --port=3306 --type nodePort	
+
+	
+full qulified ip address?
+	nslookup
+	
+find difference type of volumes in pod lebel?
+	kubectl explain pod.spec.volumes  	
+
+Share the volume between containers which present in same pod ?
+	emptyDir use to share the volume between container
+	once pod deleted the data will wipe out.
+	
+create volumes in pod lebel?
+	use the block "volumes" in your pod yaml file.
+		volumes:
+			- name: exchanges
+			  emptyDir: {}
+			  
+How container use the pod volume?
+	use "volumeMounts" in your container section in your pod yaml
+	
+		volumeMounts:
+			- name: exchanges 
+			  mountPath: "/tmp/yourpath"
+
+How to access perticular container in k8?
+
+	kubectl exec pod_name -c container_name -- linux_command
+
+
+how to share the data between the pods within the same node?
+	hostPath volume only consume if the pods are in same node
+
+	we need to use "hostPath" in your pod yaml
+		volumes:
+			- name: log-volume
+			  hostPath:
+				path: /var/log
+				type: directory
+				
+How to use the hostPath volume in container?
+		
+Why hostPath is non-persistent volume?
+
+	in k8 worker nodes are dynamic and pod can be created on any of them.
+	so the volume created by hostPath may not use by the pod once it is recreated as it may go to differnent worker node.
+	
+why we use configmap in storage volume in pod?
+how to load a property file in container in pod?
+	To read property file from node/from some location  to the container present in pod.
+	
+why we use secret in storage volume in pod?
+how to load a secret file in container in pod?
+	To read secret file from node/from some location  to the container present in pod.
+	
+why persistent volume?
+	ex to store the database data which we can not make it public.
+	in that case we chose persistent volume.
+	
+how to create persistent volume?
+	using  persistentVolume and persistentVolumeClaim
+	
+	kubectl explain pv.spec   --> different type of storage volume  
+
+	kind: persistentVolume
+			and
+	storageClassName: manual   ( for non cloud / san  / nfs)
+			and 
+	hostPath: 
+		path: "/mnt/data"
+
+suppose i have 7g , 5g , 3g pv i need 4g  pvc then it can got to any one from 5g or 7g which storage size it will chose?
+	5g
+
+how to check the pvc?
+	kubectl get pvc
+	
+what is accessModes ReadWriteMany ?
+	if pv has accessModes ReadWriteMany then multiple container in pod can access the storage (pv) mapped to pvc.
+			  
+What is self healing pods / if there is issue how pod get fixs itself?
+	always pod should created under deployment in real time.
+	
+	pod ---> containers ---> images ( pod running then all containers running)
+	
+	it is done by probeing. two type of probes --> readiness probs and liveness probs.
+	actually the app in the container is running or not determine by readiness and liveness
+	in readiness service will not allow the tarffic if container has any issue.
+	in liveness the pod will be restarted if there any issue in container.
+	
+	healthz ( Health Check in LB / health check api in realtime)		  
+	
+How to prioritize the pod?
+	priorityClassName 
+	
+	kubectl api-resources | grep priority 
+	
+	kubectl get pc
+	
+
+How k8 give us authentication?
+	.kube/config we get authentication.
+	
+how to check different roles in k8?
+	kubectl get roles
+
+		application role --> when role given to the apps in namespace
+		cluster role --> The user able to create/list/update/delete difference resource ( deployment , nodes , namespace )in cluster.
+		
+Different policys in k8?
+	using the below policy we can create difference roles for the users
+
+	c	--- create
+	r	--- list ( get ) and describe
+	U	--- edit , update and apply
+	D	--- delete
+
+Roles are the part of namespace or not?
+
+	kubectl api-resources | rep  -i role
+
+how to create the role in k8?
+	using command or yaml file
+	
+	create a developer role
+	------------------------
+	kubectl create role developer --verb=create --verb=get --verb=list --resource=pods -n my_namespace
+	
+How to create a rolebuinding in k8?
+
+	bind the user sumanta to developer role
+	----------------------------------------
+	kubectl create rolebinding developer-binding-sumanta --role=developer --user=sumanta -n my_namespace
+	
+	kubectl get rolebinding -n my_namespace
+	
+how to check the sumanta is able to do the task or not?
+
+	kubectl get pods -n my_namespace --as sumanta
+	
+How to promote as user from application role to cluster role
+	
+	kubectl create cluserrole nodes-admin-role --verb=get,list --resource=nodes
+	
+how to bind a user to the cluserrole?
+	kubectl create clusterrolebinding nodes-admin-binding-sumanta --clusterrole=nodes-admin-role --user=sumanta
+	
+what is resource quota?
+	kubectl api-resources | grep -i quota    ( it is part of namespace)
+	
+	Resourse quota use for pod in namespace. So it is mentioned at the time of namespace creation.
+
+
+
+
+	
+
+	
+	
+===================================
+Vault Secret Injection?
+-----------------------
+
+apiVersion: v1
+kind: Pod
+metadata:
+  annotations:
+    prometheus.io/path: /metrics
+    prometheus.io/port: "8080"
+This may be another simple example....
+
+=======================================
+
+CAP
+==========================================
+
+
+
+
+
+
+
+
+
+
+
+
+ End Lab Start LabAzure05:00Used $0 of $10
+
+Close
+Id:	27611
+Name:	student_7pmnzn7zl5xjdglc_00460266@vocareumvocareum.onmicrosoft.com
+Password:	EdJQ13DUSuZg#B2XyvAgHp0Ix66rQ8MszbdU8Y
+
+az account set --subscription 2f02f8ca-866d-410a-bfed-32876b28bc58
+
+
+
+Id:	27665
+Name:	student_7pmnzn7zl5xjdglc_00460266@vocareumvocareum.onmicrosoft.com
+Password:	hnz42QN3dgjRaxhCqM&Vsa6lz!AQ?lNno%Q
+
+
+
+
+
+
+
+
+
+
+
+
