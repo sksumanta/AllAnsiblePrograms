@@ -2,6 +2,7 @@ Set up Devops and test the set up step by step
 ==============================================================================
 
 
+
 Step 1  create EC2 instance in AWS account
 =======
 Use the url https://aws.amazon.com/ to create or login to aws account
@@ -29,6 +30,17 @@ Step 2 install Jenkins in EC2
 		sudo yum install jenkins -y
 		sudo systemctl start jenkins
 		sudo systemctl status jenkins
+		
+		add an user using the command 	" sudo useradd jenkins-admin " 
+		create password for the user  " sudo passwd jenkins-admin  "     { password   jenkins123  }
+		configure user privileges by editing the sudoers file using  sudo visudo
+			Add “jenkins-admin ALL=(ALL) ALL” to this sudoers file.
+		Now enable PasswordAuthentication using sudo vi /etc/ssh/sshd_config		
+			change PasswordAuthentication yes  by uncommenting it 
+		Restart ssh service  ---> sudo service sshd reload
+		Now swith the user to jenkins-admin    --->  sudo su - jenkins-admin
+		Generate ssh key using ---> ssh-keygen
+		check jenkins version ---> jenkins --version
 	
 			http://<your-public-ec2-ip>:8080  on browser 
 		
@@ -150,6 +162,34 @@ pipeline {
 		To Verify go to cd /var/lib/jenkins/workspace/{your pipeline name}/target  path and you will get the jar files created.
 
 
+									Lets create a new EC2 instance ( follow step 1 to create EC2 instance ) to perform below steps
 
+Step 9 Install Ansible in EC2
+======
+		sudo vi /etc/hostname
+			replace the name  { ex ( ip-172-31-45-49.eu-north-1.compute.internal  to AnsibleServer }
+		sudo init 6   /  reboot Ec2 instance
+		add an user using the command 	" sudo useradd ansible-admin " 
+		create password for the user  " sudo passwd ansible-admin  "     { password   ansible123  }
+		configure user privileges by editing the sudoers file using  ---> sudo visudo
+			Add “ ansible-admin ALL=(ALL) ALL ” to this sudoers file.
+		Now enable PasswordAuthentication using ---> sudo vi /etc/ssh/sshd_config		
+			change PasswordAuthentication yes  by uncommenting it 
+		Restart ssh service  ---> sudo service sshd reload
+		Now swith the user to ansible-admin    --->  sudo su - ansible-admin
+		Generate ssh key using ---> ssh-keygen
 		
-				
+		Lets install Ansible --->   sudo amazon-linux-extras install ansible2
+		check ansible version ---> ansible --version
+		
+		Now to establish ssh connection between JenkinsServer and AnsibleServer 
+		--------------------------------------------------------------------------
+		Do the below steps in AnsibleServer
+			vi ~/.ssh/authorized_keys
+				add the content of "id_rsa.pub" from JenkinsServer
+			chmod 644 ~/.ssh/authorized_keys
+			
+		Do the same steps in JenkinsServer
+		
+		Now we can establish ssh connection in JenkinsServer using  ---> "ssh ansible-admin@anisbleServer_private_ip"
+			To establish ssh connection in AnsibleServer using  ---> "ssh jenkins-admin@jenkinsServer_private_ip"
