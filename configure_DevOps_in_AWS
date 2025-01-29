@@ -1,0 +1,155 @@
+Set up Devops and test the set up step by step
+==============================================================================
+
+
+Step 1  create EC2 instance in AWS account
+=======
+Use the url https://aws.amazon.com/ to create or login to aws account
+
+chose EC2 service from Service  ----> click launch instance ----> Provide "Name" under “Name and tags” section.
+			----> Select required AMI template under “Application and OS Images (Amazon Machine Image)“ section.
+			----> Select instance type ( i have selected "t3.micro" Free tier eligible )
+			----> Configure storage under “Configure storage“ section ( i have not changed storage setting )
+			----> Configure security group ( 22 , 8080 ) and provide security group name under “Network settings“ section
+			----> Create a new key-pair to access EC2 instance for  remote access. ( .pem use in windows and .ppk for linux /putty)
+			----> Now click on lunch instance  and the a new EC2 instance will be ready.
+
+	Connect to EC2 
+	-----------------
+		select the instance ----> click connect ----> ec2 instance will open in the browser
+		
+Step 2 install Jenkins in EC2 
+=========
+
+		sudo wget -O /etc/yum.repos.d/jenkins.repo \
+				https://pkg.jenkins.io/redhat/jenkins.repo
+		sudo rpm --import https://pkg.jenkins.io/redhat/jenkins.io-2023.key
+		sudo yum upgrade
+		sudo yum install java-17-amazon-corretto-headless
+		sudo yum install jenkins -y
+		sudo systemctl start jenkins
+		sudo systemctl status jenkins
+	
+			http://<your-public-ec2-ip>:8080  on browser 
+		
+		sudo cat /var/lib/jenkins/secrets/initialAdminPassword   ---> provide default jenkins password
+	
+	How to setup manage node for jenkins in EC2
+	--------------------------------------------
+		login jenkins ----> click manage jenkins ---> manage plugins ----> install Amazon EC2 plugins
+		
+Step 3 install Git in EC2
+=======
+		sudo yum install git -y
+		git --version
+		
+Step 4 Configure gitHub in Jenkins
+========
+		Go to Jenkins dashboard ---> manage jenkins ---> Manage Plugins ---> Find "Github" plugin from Available plugins --->
+		---> install the plugin
+		
+		now again go to Manage Jenkins ---> Global tool configuration ---> go to the "Git" section ---> Fill name as "Git" path as "git"
+		---> apply ---> save
+		
+step 5 Integrate Git into the pipeline
+=========
+		Go to Jenkins dashboard ---> click on "New Item" ---> Fill project name and Select Item type ( free style or pipeline )
+		Now go to Jenkins dashboard ---> click on the job ---> configuration --->  the Source Code Management section ---> 
+		Fill "project repository URL ( EX https://github.com/sksumanta/the_devops_repo.git )"  ---> fill credential 
+		( provide gitHub credential ) --->  Provide brance under branch to build 
+		
+Step 6 Install Maven in EC2
+========
+		cd /opt
+		download Maven from https://maven.apache.org/ using below command
+			sudo wget https://dlcdn.apache.org/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz
+		extract Apache Maven ---> sudo tar -xvzf apache-maven-3.9.9-bin.tar.gz
+		Add JAVA_HOME and M2_HOME for Maven
+		--------------------------------------
+			cd ~
+			To find java file path  --->  sudo find / -name java -type f -exec grep -i 'bin/java' {} \; 
+			vi .bash_profile
+				JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto.x86_64/bin/java
+				M2_HOME=/opt/apache-maven-3.9.9
+				M2=/opt/apache-maven-3.9.9/bin
+				PATH=$PATH:$HOME/.local/bin:$HOME/bin:$JAVA_HOME:$M2:$M2_HOME
+			source .bash_profile  ---> to execute and reload system variables
+			echo $PATH  ---> to verify the path variables are updated 
+			To verify Apache Maven is installed
+				mvn -v
+
+Step 7 Install Apache Maven Jenkins plugin
+=========
+		Navigate to “Dashboard“ → “Manage Jenkins“ → “Manage Plugins“ → “Available” → In the search box, enter “Maven”
+			---> install  “Maven Integration” plugin 
+
+	Configure Apache Maven in Jenkins 
+	---------------------------------
+		Go to “Dashboard“ → “Manage Jenkins“ → “Global Tool Coonfiguration“ → “JDK” ---> 
+		“Add JDK” ( /usr/lib/jvm/java-17-amazon-corretto.x86_64 ) ---> Uncheck “Install automatically”.
+		Then go to “Maven” section ---> Click “Add Maven” ---> Uncheck “Install automatically” ---> 
+		Then add name (EX -- maven-3.9.9) and MAVEN_HOME path ( /opt/apache-maven-3.9.9 ) .
+
+Step 8 Integrate Apache Maven into the pipeline
+=======
+		Go to Jenkins dashboard ---> click on "New Item" ---> Fill project name ( maven_test_pipe ) and Select Item type (pipeline)	
+
+pipeline {
+    agent any
+
+    //tools {
+    //     maven 'maven'
+    //     jdk 'java'
+    //}
+	
+    stages {
+        stage('Getting the project from GIT') {
+            steps {
+                echo 'Pulling..';
+			    cleanWs()
+                git branch: 'master',
+                credentialsId: '247052cb-45e6-4aee-bda8-979e64994213',
+				url: 'https://github.com/sksumanta/helloWorld_mvn_jenkins.git' ;
+            
+            }
+        }
+        
+    stage('Cleaning the project') {
+             
+            steps {
+                echo 'cleaning project ...'
+                sh '''
+                /opt/apache-maven-3.9.9/bin/mvn clean
+                '''
+            }
+        }
+        
+    stage('Artifact Construction') {
+             
+            steps {
+                echo "artificat contruction"
+                sh '''
+                /opt/apache-maven-3.9.9/bin/mvn  package
+                '''
+            }
+			post {
+                success {
+                    echo "Now Archiving the Artifacts....."
+                    //archiveArtifacts artifacts: '**/*.jar'
+                }
+            }
+        }
+
+    }
+}
+
+				or  we can create a Maven project as below
+		Go to Jenkins dashboard ---> click on "New Item" ---> Fill project name ( maven_type_proj ) and Select Item type (Maven project)
+		---> go to Source Code Management ---> git section ---> fill Repository URL and Credentials ---> Branches to build ( master )
+		---> next go to Build ---> root pom ( pom.xml) ---> Goals and options ( clean package )
+		To Verify go to cd /var/lib/jenkins/workspace/{your pipeline name}/target  path and you will get the jar files created.
+
+
+
+		
+				
