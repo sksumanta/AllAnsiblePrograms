@@ -196,8 +196,8 @@ Step 9 Install Ansible in EC2
 		
 		Now you can install Ansible on “ansibleServer” EC2 instance  ---> sudo amazon-linux-extras install ansible2
 		 verify Ansible version using ---> ansible --version
-		 
-Step 10 integrate Jenkins and Ansible using " Publish over SSH " plugin
+		
+Step 10 integrate Jenkins and Ansible using Ansible Plugin , SSH Credentials plugin  SSH Agent Plugin and " Publish over SSH " plugin
 ===========
 		Go to “Dashboard” → “Manage Jenkins” → “Configure System” → “Available plugins” ---> search “Publish over SSH“ 
 		Click “Install without restart”
@@ -209,6 +209,10 @@ Step 10 integrate Jenkins and Ansible using " Publish over SSH " plugin
 		---> check the box for Use password authentication, or use a different key ---->  provide Passphrase / Password ( ansible user password )
 		---> click apply and test the configuration ---> once success click save.
 		
+		Go to Manage Jenkins.  ---> Select Credentials (under Security) ---> click on (global) ---> Click Add Credentials
+		--->  select "SSH Username with private key" under "kind" section ---> provide username ( ) ,
+			id ( access_ansible) and Private Key select "Enter directly" fill ( the jenkins server private key ) 
+		
 Step 11 Create a directory in Ansible server to transfer "jar" file once created by jenkins pipeline
 ============
 		cd /opt
@@ -218,6 +222,84 @@ Step 11 Create a directory in Ansible server to transfer "jar" file once created
 Step 12 Test the build "jar" file is transfering from jenkins pipeline to Ansible server
 ============
 
+pipeline {
+    agent any
+
+    //tools {
+    //     maven 'maven'
+    //     jdk 'java'
+    //}
+	environment{
+		ansible_ssh_server = "172.31.45.49"
+		playbook_path = "/home/ansible-admin/ansible_src"
+		mail_recipient = "sksahoo"
+		runFail = "false"
+	}
+    stages {
+        stage('Getting the project from GIT') {
+            steps {
+                echo 'Pulling..';
+			    cleanWs()
+                git branch: 'master',
+                credentialsId: '247052cb-45e6-4aee-bda8-979e64994213',
+				url: 'https://github.com/sksumanta/helloWorld_mvn_jenkins.git' ;
+            
+            }
+        }
+        
+		stage('Cleaning the project') {
+             
+            steps {
+                echo 'cleaning project ...'
+                sh '''
+                /opt/apache-maven-3.9.9/bin/mvn clean
+                '''
+            }
+        }
+        
+		stage('Artifact Construction') {
+             
+            steps {
+                echo "artificat contruction"
+                sh '''
+                /opt/apache-maven-3.9.9/bin/mvn  package
+                '''
+            }
+			post {
+                success {
+                    echo "Now Archiving the Artifacts....."
+                    archiveArtifacts artifacts: '**/*.jar'
+					
+                }
+            }
+        }
+		stage('Transfer file using ansible-playbook') {      
+            steps {
+				script {
+					 failed_stage = env.STAGE_NAME
+					 sshagent(['access_ansible']){
+						// Run the Ansible playbook
+                        
+						//ssh_ansible_call = $/ssh -q ansible_admin@${ansible_ssh_server} -o StrictHostKeyChecking=no -C 'ansible-playbook  /home/ansible-admin/ansible_src/copy_file_from_remote_2_local.yaml -i /home/ansible-admin/ansible_src/hosts.yaml '/$
+						ssh_ansible_call = $/ssh    ansible-admin@172.31.45.49  -C 'ansible-playbook  -vvv /home/ansible-admin/ansible_src/copy_file_from_remote_2_local.yaml -i /home/ansible-admin/ansible_src/hosts.yaml'/$
+						try{
+							result_of_ansible = sh( script: "${ssh_ansible_call}", returnStdout: true)
+							echo "${result_of_ansible}"
+						}
+						catch(err){
+							runFail = "true"
+							echo "step ${failed_stage} stage failed with below error ${err}"
+							sh "exit 1"
+						}
+					}
+				}
+            }
+        }
+
+    }
+}
+		
+	
 		
 
 
