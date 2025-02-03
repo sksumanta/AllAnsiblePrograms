@@ -221,7 +221,51 @@ Step 11 Create a directory in Ansible server to transfer "jar" file once created
 		
 Step 12 Test the build "jar" file is transfering from jenkins pipeline to Ansible server
 ============
+		In ansible server
+		------------------
+		[ansible-admin@AnsibleServer ansible_src]$ cat hosts.yaml
+		---
+		control:
+		   hosts:
+		      172.31.145.49:
+		jenkinsnode:
+		   hosts:
+		      172.31.128.126:
+		   vars:
+		      ansible_become: true
+		      remote_user: jenkins-admin
+		      ansible_become_pass: jenkins123
+		linux:
+		   children:
+		      jenkinsnode:
 
+		[ansible-admin@AnsibleServer ansible_src]$ cat copy_file_from_remote_2_local.yaml
+			---
+			- name: Fetch file from remote host to local
+			  hosts: jenkinsnode
+			  remote_user: jenkins-admin
+			  tasks:
+			    - name: Find file from remote host
+			      find:
+			        paths: /var/lib/jenkins/workspace/transfer_Jar_2_otherServer/target
+			        patterns: "*.jar"
+			        recurse: yes
+			      register: file_found
+			
+			    - name: Fetch files to local machine
+			      fetch:
+			        src: "{{ item.path }}"
+			        dest: "/home/ansible-admin/copied_files/"
+			        flat: yes
+			      loop: "{{ file_found.files }}"
+			      when: file_found.matched > 0
+			
+			  #  excute  ansible-playbook -i hosts.yaml  copy_file_from_remote_2_local.yaml
+			[ansible-admin@AnsibleServer ansible_src]$ 
+
+
+Now create a pipeline and add the pipeline code as below 
+--------------------------------------------------------------
 pipeline {
     agent any
 
