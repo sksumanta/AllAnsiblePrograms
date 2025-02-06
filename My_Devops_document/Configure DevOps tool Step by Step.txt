@@ -1,0 +1,490 @@
+
+Step 1  create EC2 instance in AWS account
+=======
+Use the url https://aws.amazon.com/ to create or login to aws account
+
+chose EC2 service from Service  ----> click launch instance ----> Provide "Name" under “Name and tags” section.
+			----> Select required AMI template under “Application and OS Images (Amazon Machine Image)“ section.
+			----> Select instance type ( i have selected "t3.micro" Free tier eligible )
+			----> Configure storage under “Configure storage“ section ( i have not changed storage setting )
+			----> Configure security group ( 22 , 8080 ) and provide security group name under “Network settings“ section
+			----> Create a new key-pair to access EC2 instance for  remote access. ( .pem use in windows and .ppk for linux /putty)
+			----> Now click on lunch instance  and the a new EC2 instance will be ready.
+
+	Connect to EC2 
+	-----------------
+		select the instance ----> click connect ----> ec2 instance will open in the browser
+		
+Step 2 install Jenkins in EC2 
+=========
+
+		sudo wget -O /etc/yum.repos.d/jenkins.repo \
+				https://pkg.jenkins.io/redhat/jenkins.repo
+		sudo rpm --import https://pkg.jenkins.io/redhat/jenkins.io-2023.key
+		sudo yum upgrade
+		sudo yum install java-17-amazon-corretto-headless
+		sudo yum install jenkins -y
+		sudo systemctl start jenkins
+		sudo systemctl status jenkins
+		
+		add an user using the command 	" sudo useradd jenkins-admin " 
+		create password for the user  " sudo passwd jenkins-admin  "     { password   jenkins123  }
+		configure user privileges by editing the sudoers file using  sudo visudo
+			Add “jenkins-admin ALL=(ALL) ALL” to this sudoers file.
+		Now enable PasswordAuthentication using sudo vi /etc/ssh/sshd_config		
+			change PasswordAuthentication yes  by uncommenting it 
+		Restart ssh service  ---> sudo service sshd reload
+		Now swith the user to jenkins-admin    --->  sudo su - jenkins-admin
+		Generate ssh key using ---> ssh-keygen
+		check jenkins version ---> jenkins --version
+	
+			http://<your-public-ec2-ip>:8080  on browser 
+		
+		sudo cat /var/lib/jenkins/secrets/initialAdminPassword   ---> provide default jenkins password
+	
+	How to setup manage node for jenkins in EC2
+	--------------------------------------------
+		login jenkins ----> click manage jenkins ---> manage plugins ----> install Amazon EC2 plugins
+		
+Step 3 install Git in EC2
+=======
+		sudo yum install git -y
+		git --version
+		
+Step 4 Configure gitHub in Jenkins
+========
+		Go to Jenkins dashboard ---> manage jenkins ---> Manage Plugins ---> Find "Github" plugin from Available plugins --->
+		---> install the plugin
+		
+		now again go to Manage Jenkins ---> Global tool configuration ---> go to the "Git" section ---> Fill name as "Git" path as "git"
+		---> apply ---> save
+		
+step 5 Integrate Git into the pipeline
+=========
+		Go to Jenkins dashboard ---> click on "New Item" ---> Fill project name and Select Item type ( free style or pipeline )
+		Now go to Jenkins dashboard ---> click on the job ---> configuration --->  the Source Code Management section ---> 
+		Fill "project repository URL ( EX https://github.com/sksumanta/the_devops_repo.git )"  ---> fill credential 
+		( provide gitHub credential ) --->  Provide brance under branch to build 
+		
+Step 6 Install Maven in EC2
+========
+		cd /opt
+		download Maven from https://maven.apache.org/ using below command
+			sudo wget https://dlcdn.apache.org/maven/maven-3/3.9.9/binaries/apache-maven-3.9.9-bin.tar.gz
+		extract Apache Maven ---> sudo tar -xvzf apache-maven-3.9.9-bin.tar.gz
+		Add JAVA_HOME and M2_HOME for Maven
+		--------------------------------------
+			cd ~
+			To find java file path  --->  sudo find / -name java -type f -exec grep -i 'bin/java' {} \; 
+			vi .bash_profile
+				JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto.x86_64/bin/java
+				M2_HOME=/opt/apache-maven-3.9.9
+				M2=/opt/apache-maven-3.9.9/bin
+				PATH=$PATH:$HOME/.local/bin:$HOME/bin:$JAVA_HOME:$M2:$M2_HOME
+			source .bash_profile  ---> to execute and reload system variables
+			echo $PATH  ---> to verify the path variables are updated 
+			To verify Apache Maven is installed
+				mvn -v
+
+Step 7 Install Apache Maven Jenkins plugin
+=========
+		Navigate to “Dashboard“ → “Manage Jenkins“ → “Manage Plugins“ → “Available” → In the search box, enter “Maven”
+			---> install  “Maven Integration” plugin 
+
+	Configure Apache Maven in Jenkins 
+	---------------------------------
+		Go to “Dashboard“ → “Manage Jenkins“ → “Global Tool Coonfiguration“ → “JDK” ---> 
+		“Add JDK” ( /usr/lib/jvm/java-17-amazon-corretto.x86_64 ) ---> Uncheck “Install automatically”.
+		Then go to “Maven” section ---> Click “Add Maven” ---> Uncheck “Install automatically” ---> 
+		Then add name (EX -- maven-3.9.9) and MAVEN_HOME path ( /opt/apache-maven-3.9.9 ) .
+
+Step 8 Integrate Apache Maven into the pipeline
+=======
+		Go to Jenkins dashboard ---> click on "New Item" ---> Fill project name ( maven_test_pipe ) and Select Item type (pipeline)	
+
+pipeline {
+    agent any
+
+    //tools {
+    //     maven 'maven'
+    //     jdk 'java'
+    //}
+	
+    stages {
+        stage('Getting the project from GIT') {
+            steps {
+                echo 'Pulling..';
+			    cleanWs()
+                git branch: 'master',
+                credentialsId: '247052cb-45e6-4aee-bda8-979e64994213',
+				url: 'https://github.com/sksumanta/helloWorld_mvn_jenkins.git' ;
+            
+            }
+        }
+        
+    stage('Cleaning the project') {
+             
+            steps {
+                echo 'cleaning project ...'
+                sh '''
+                /opt/apache-maven-3.9.9/bin/mvn clean
+                '''
+            }
+        }
+        
+    stage('Artifact Construction') {
+             
+            steps {
+                echo "artificat contruction"
+                sh '''
+                /opt/apache-maven-3.9.9/bin/mvn  package
+                '''
+            }
+			post {
+                success {
+                    echo "Now Archiving the Artifacts....."
+                    archiveArtifacts artifacts: '**/*.jar'
+                }
+            }
+        }
+
+    }
+}
+
+				or  we can create a Maven project as below
+		Go to Jenkins dashboard ---> click on "New Item" ---> Fill project name ( maven_type_proj ) and Select Item type (Maven project)
+		---> go to Source Code Management ---> git section ---> fill Repository URL and Credentials ---> Branches to build ( master )
+		---> next go to Build ---> root pom ( pom.xml) ---> Goals and options ( clean package )
+		To Verify go to cd /var/lib/jenkins/workspace/{your pipeline name}/target  path and you will get the jar files created.
+
+
+									Lets create a new EC2 instance ( follow step 1 to create EC2 instance ) to perform below steps
+
+Step 9 Install Ansible in EC2
+======
+		sudo vi /etc/hostname
+			replace the name  { ex ( ip-172-31-45-49.eu-north-1.compute.internal  to AnsibleServer }
+		sudo init 6   /  reboot Ec2 instance
+		add an user using the command 	" sudo useradd ansible-admin " 
+		create password for the user  " sudo passwd ansible-admin  "     { password   ansible123  }
+		configure user privileges by editing the sudoers file using  ---> sudo visudo
+			Add “ ansible-admin ALL=(ALL) ALL ” to this sudoers file.
+		Now enable PasswordAuthentication using ---> sudo vi /etc/ssh/sshd_config		
+			change PasswordAuthentication yes  by uncommenting it 
+		Restart ssh service  ---> sudo service sshd reload
+		Now swith the user to ansible-admin    --->  sudo su - ansible-admin
+		Generate ssh key using ---> ssh-keygen
+		
+		Lets install Ansible --->   sudo amazon-linux-extras install ansible2
+		check ansible version ---> ansible --version
+		
+		Now to establish ssh connection between JenkinsServer and AnsibleServer 
+		--------------------------------------------------------------------------
+		Do the below steps in AnsibleServer
+			vi ~/.ssh/authorized_keys
+				add the content of "id_rsa.pub" from JenkinsServer
+			chmod 644 ~/.ssh/authorized_keys
+			
+		Do the same steps in JenkinsServer
+		
+		Now to connect ansible server using ssh from JenkinsServer using  ---> "ssh ansible-admin@anisbleServer_private_ip"
+			to connect ansible server using ssh from AnsibleServer using  ---> "ssh jenkins-admin@jenkinsServer_private_ip"
+		
+		Now you can install Ansible on “ansibleServer” EC2 instance  ---> sudo amazon-linux-extras install ansible2
+		 verify Ansible version using ---> ansible --version
+		
+Step 10 integrate Jenkins and Ansible using Ansible Plugin , SSH Credentials plugin  SSH Agent Plugin and " Publish over SSH " plugin
+===========St
+		Go to “Dashboard” → “Manage Jenkins” → “Configure System” → “Available plugins” ---> search “Publish over SSH“ 
+		Click “Install without restart”
+		To Configure “Publish over SSH“ plugin
+		--------------------------------------
+		Go to “Dashboard“ → “Manage Jenkins” → “Configure System” → "system" ---> “Publish over SSH” 
+		----> click add under SSH Servers ----> provide name ( ansible-admin@172.31.45.49 this is user_name@ansible_server_private_IP )
+		---> provide hostname ( private ip of AnsibleServer ) ----> provide user name ( ansible user name ) ---> click on advance
+		---> check the box for Use password authentication, or use a different key ---->  provide Passphrase / Password ( ansible user password )
+		---> click apply and test the configuration ---> once success click save.
+		
+		Go to Manage Jenkins.  ---> Select Credentials (under Security) ---> click on (global) ---> Click Add Credentials
+		--->  select "SSH Username with private key" under "kind" section ---> provide username ( ) ,
+			id ( access_ansible) and Private Key select "Enter directly" fill ( the jenkins server private key ) 
+		
+Step 11 Create a directory in Ansible server to transfer "jar" file once created by jenkins pipeline
+============
+		cd /opt
+		sudo mkdir -p keep_builds
+		sudo chown ansible-admin:ansible-admin keep_builds
+		
+Step 12 Test the build "jar" file is transfering from jenkins pipeline to Ansible server
+============
+
+pipeline {
+    agent any
+
+    //tools {
+    //     maven 'maven'
+    //     jdk 'java'
+    //}
+	environment{
+		ansible_ssh_server = "172.31.45.49"
+		playbook_path = "/home/ansible-admin/ansible_src"
+		mail_recipient = "sksahoo"
+		runFail = "false"
+	}
+    stages {
+        stage('Getting the project from GIT') {
+            steps {
+                echo 'Pulling..';
+			    cleanWs()
+                git branch: 'master',
+                credentialsId: '247052cb-45e6-4aee-bda8-979e64994213',
+				url: 'https://github.com/sksumanta/helloWorld_mvn_jenkins.git' ;
+            
+            }
+        }
+        
+		stage('Cleaning the project') {
+             
+            steps {
+                echo 'cleaning project ...'
+                sh '''
+                /opt/apache-maven-3.9.9/bin/mvn clean
+                '''
+            }
+        }
+        
+		stage('Artifact Construction') {
+             
+            steps {
+                echo "artificat contruction"
+                sh '''
+                /opt/apache-maven-3.9.9/bin/mvn  package
+                '''
+            }
+			post {
+                success {
+                    echo "Now Archiving the Artifacts....."
+                    archiveArtifacts artifacts: '**/*.jar'
+					
+                }
+            }
+        }
+		stage('Transfer file using ansible-playbook') {      
+            steps {
+				script {
+					 failed_stage = env.STAGE_NAME
+					 sshagent(['access_ansible']){
+						// Run the Ansible playbook
+                        
+						//ssh_ansible_call = $/ssh -q ansible_admin@${ansible_ssh_server} -o StrictHostKeyChecking=no -C 'ansible-playbook  /home/ansible-admin/ansible_src/copy_file_from_remote_2_local.yaml -i /home/ansible-admin/ansible_src/hosts.yaml '/$
+						ssh_ansible_call = $/ssh    ansible-admin@172.31.45.49  -C 'ansible-playbook  -vvv /home/ansible-admin/ansible_src/copy_file_from_remote_2_local.yaml -i /home/ansible-admin/ansible_src/hosts.yaml'/$
+						try{
+							result_of_ansible = sh( script: "${ssh_ansible_call}", returnStdout: true)
+							echo "${result_of_ansible}"
+						}
+						catch(err){
+							runFail = "true"
+							echo "step ${failed_stage} stage failed with below error ${err}"
+							sh "exit 1"
+						}
+					}
+				}
+            }
+        }
+
+    }
+}
+		
+Step 13 Configure Passwordless SSH authentication to localhost for Ansible
+============
+		sudo ssh-copy-id -i /home/ansible-admin/.ssh/id_rsa.pub ansible-admin@ansible_server_private_IP
+		now verify by using  ssh ansible-admin@ansible_server_private_IP
+		
+Step 14 Install docker in ansible EC2 instance
+============
+		sudo mkdir -p /opt/docker
+		sudo yum install docker -y
+		sudo chown ansible-admin:ansible-admin /opt/docker
+		add the current user “ansible-admin” to the Docker group ---> sudo usermod -a -G docker ansible-admin
+		id ansible-admin ----> output will be ---> uid=1001(ansible-admin) gid=1001(ansible-admin) groups=1001(ansible-admin),992(docker)
+		Start docker --->  sudo systemctl start docker
+		check the status of docker --->  sudo systemctl status docker
+		create account in dockerhub   https://hub.docker.com/  ---->	user name   sksumanta password   ******
+		use "docker login" using the above userid and password to login docker in EC2 instance 
+		verify the docker.sock file should have docker group ---> ls -l /var/run/docker.sock
+				srw-rw---- 1 root docker 0 Feb  4 10:34 /var/run/docker.sock
+		check the version of docker ---> docker --version
+		validate the docker command is running or not --->  docker run hello-world   then docker images
+
+Step 14 cteate a docker file and build it
+============
+		mkdir first_docker
+		cd first_docker
+		I kept a jar file "  original-jb-hello-world-maven-0.2.0.jar "  in "first_docker" folder where we will create our dockerfile ( build path)
+		vi dockerfile
+			FROM ubuntu:20.04
+			ENV HOME=/opt/app
+			WORKDIR $HOME
+			ADD ./original-jb-hello-world-maven-0.2.0.jar  /opt/app
+			ENTRYPOINT ["java", "-jar", "./original-jb-hello-world-maven-0.2.0.jar"]
+		
+		now build the image ---->  docker build -t hello:1st_test .
+		verify the image is created --->  docker images
+			REPOSITORY    TAG        IMAGE ID       CREATED         SIZE
+			hello         1st_test   ddbbbe8e50a2   7 minutes ago   72.8MB
+		Let's establish a tag that will facilitate the image's upload to Dockerhub using " docker tag "
+			docker tag hello:1st_test sksumanta/hello:1st_test
+		verify the image ---> docker images
+			REPOSITORY        TAG        IMAGE ID       CREATED          SIZE
+			sksumanta/hello   1st_test   ddbbbe8e50a2   36 minutes ago   72.8MB
+		Push the Docker image to Dockerhub using " docker push "
+			docker push sksumanta/hello:1st_test
+		Loin to "https://hub.docker.com/" and check the image will be available 
+		
+Step 15 Create Ansible playbook to perform Docker tasks
+============
+		cat hello_docker_app.yaml
+
+		---
+		- hosts: ansiblenode
+		  user: ansible-admin
+
+		  tasks:
+			- name: create docker image from docker file
+			  command: docker build -t hello:latest .
+			  args:
+				chdir: /home/ansible-admin/docker_src  # docker file path 
+
+			- name: create tag to push image onto dockerhub
+			  command: docker tag hello:latest sksumanta/hello:latest
+
+			- name: push docker image onto dockerhub
+			  command: docker push sksumanta/hello:latest
+
+		execute the playbook ---> ansible-playbook -i hosts.yaml  -u ansible-admin hello_docker_app.yaml 
+		To verify we can use  docker images and login to docker hub
+
+Step 16: Integrate Ansible Docker tasks into the pipeline
+===========
+				
+		pipeline {
+			agent any
+
+			//tools {
+			//     maven 'maven'
+			//     jdk 'java'
+			//}
+			environment{
+				ansible_ssh_server = "172.31.45.49"
+				playbook_path = "/home/ansible-admin/ansible_src"
+				mail_recipient = "sksahoo"
+				runFail = "false"
+			}
+			stages {
+				stage('Getting the project from GIT') {
+					steps {
+						echo 'Pulling..';
+						cleanWs()
+						git branch: 'master',
+						credentialsId: '247052cb-45e6-4aee-bda8-979e64994213',
+						url: 'https://github.com/sksumanta/helloWorld_mvn_jenkins.git' ;
+					
+					}
+				}
+				
+				stage('Cleaning the project') {
+					 
+					steps {
+						echo 'cleaning project ...'
+						sh '''
+						/opt/apache-maven-3.9.9/bin/mvn clean
+						'''
+					}
+				}
+				
+				stage('Artifact Construction') {
+					 
+					steps {
+						echo "artificat contruction"
+						sh '''
+						/opt/apache-maven-3.9.9/bin/mvn  package
+						'''
+					}
+					post {
+						success {
+							echo "Now Archiving the Artifacts....."
+							archiveArtifacts artifacts: '**/*.jar'
+							
+						}
+					}
+				}
+				stage('Transfer file using ansible-playbook') {      
+					steps {
+						script {
+							 failed_stage = env.STAGE_NAME
+							 sshagent(['access_ansible']){
+								// Run the Ansible playbook
+								
+								//ssh_ansible_call = $/ssh -q ansible_admin@${ansible_ssh_server} -o StrictHostKeyChecking=no -C 'ansible-playbook  /home/ansible-admin/ansible_src/copy_file_from_remote_2_local.yaml -i /home/ansible-admin/ansible_src/hosts.yaml '/$
+								ssh_ansible_call = $/ssh    ansible-admin@172.31.45.49  -C 'ansible-playbook  -vvv /home/ansible-admin/ansible_src/copy_file_from_remote_2_local.yaml -i /home/ansible-admin/ansible_src/hosts.yaml'/$
+								try{
+									result_of_ansible = sh( script: "${ssh_ansible_call}", returnStdout: true)
+									echo "${result_of_ansible}"
+								}
+								catch(err){
+									runFail = "true"
+									echo "step ${failed_stage} stage failed with below error ${err}"
+									sh "exit 1"
+								}
+							}
+						}
+					}
+				}
+				stage('publish docker image to dockerhub using ansible-playbook') {      
+					steps {
+						script {
+							 failed_stage = env.STAGE_NAME
+							 sshagent(['access_ansible']){
+								// Run the Ansible playbook
+								
+								//ssh_ansible_call = $/ssh -q ansible_admin@${ansible_ssh_server} -o StrictHostKeyChecking=no -C 'ansible-playbook  /home/ansible-admin/ansible_src/copy_file_from_remote_2_local.yaml -i /home/ansible-admin/ansible_src/hosts.yaml '/$
+								ssh_docker_call = $/ssh    ansible-admin@172.31.45.49  -C 'ansible-playbook  -vvv /home/ansible-admin/ansible_src/hello_docker_app.yaml -i /home/ansible-admin/ansible_src/hosts.yaml -u ansible-admin'/$
+								try{
+									result_of_ansible = sh( script: "${ssh_docker_call}", returnStdout: true)
+									echo "${result_of_ansible}"
+								}
+								catch(err){
+									runFail = "true"
+									echo "step ${failed_stage} stage failed with below error ${err}"
+									sh "exit 1"
+								}
+							}
+						}
+					}
+				}
+
+			}
+		}
+				
+Step 17 Install kubernetes in EC2 instance
+==========
+		follow step-1 to create a new Ec2 instance
+		add "k8server" in hostname file  --->  sudo vi /etc/hostname  ---> then reboot the instance
+		check aws cli version is more than "aws-cli/2.**.**" or not using --->   aws --version , if less upgrade it
+		
+		Now Install kubectl
+		-------------------
+		Note --> refer the document from  https://docs.aws.amazon.com/eks/latest/userguide/install-kubectl.html
+		Download kubectl 1.31 using  ---> curl -O https://s3.us-west-2.amazonaws.com/amazon-eks/1.31.3/2024-12-12/bin/linux/amd64/kubectl
+		check the checksum ---> openssl sha1 -sha256 kubectl
+		chmod +x kubectl
+		mv ./kubectl /usr/local/bin
+		Add the /usr/local/bin path to ~/.bashrc file --->  echo 'export PATH=/usr/local/bin:$PATH' >> ~/.bashrc
+		check kubectl version  --->  kubectl version --output=yaml
+		
+		
+		
+		
+		
+		
+			
