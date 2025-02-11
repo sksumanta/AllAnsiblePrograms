@@ -1,4 +1,5 @@
 
+
 Step 1  create EC2 instance in AWS account
 =======
 Use the url https://aws.amazon.com/ to create or login to aws account
@@ -468,11 +469,11 @@ Step 16: Integrate Ansible Docker tasks into the pipeline
 				
 Step 17 Install kubernetes in EC2 instance
 ==========
-		follow step-1 to create a new Ec2 instance
+		follow step-1 to create a new Ec2 instance ( instance type will be t3 small it is pricing )
 		add "k8server" in hostname file  --->  sudo vi /etc/hostname  ---> then reboot the instance
 		check aws cli version is more than "aws-cli/2.**.**" or not using --->   aws --version , if less upgrade it
 		
-		Now Install kubectl
+		Now Install kubectl ---> kubectl is the command-line tool used to interact with Kubernetes clusters using pods, services, deployments, and more.
 		-------------------
 		Note --> refer the document from  https://docs.aws.amazon.com/eks/latest/userguide/install-kubectl.html
 		Download kubectl 1.31 using  ---> curl -O https://s3.us-west-2.amazonaws.com/amazon-eks/1.31.3/2024-12-12/bin/linux/amd64/kubectl
@@ -482,9 +483,57 @@ Step 17 Install kubernetes in EC2 instance
 		Add the /usr/local/bin path to ~/.bashrc file --->  echo 'export PATH=/usr/local/bin:$PATH' >> ~/.bashrc
 		check kubectl version  --->  kubectl version --output=yaml
 		
+		Now Install eksctl ---> eksctl is a command-line tool for creating and managing Kubernetes clusters on AWS EKS (Elastic Kubernetes Service).
+		--------------------
+		download eksctl using --->  curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+		sudo mv /tmp/eksctl /usr/local/bin
+		ls -l /usr/local/bin
+		eksctl version
+		
+		Create IAM Role for eksctl and attach to EC2 instance
+		--------------------------
+		AWS consol ---> search IAM ---> click on IAM ---> (check left side of the page) click Roles ---> click on Create Role
+		---> select AWS service ---> EC2 ( chose "Service or use case" under "use case" ) ---> click next
+		Now select “AdministratorAccess" ,"AmazonEC2FullAccess", "AmazonVPCFullAccess", “IAMFullAccess“, “AWSCloudFormationFullAccess“, "AmazonEKSClusterPolicy"  check-box 
+		--->  and click the “next” button
+		Type “k8Eksctl_Role” into “Role name” and click “Create role”
+		
+		Now update the IAM role for the EC2 instance 
+		------------------------------
+		aws consol --> ec2 instance ---> seclect the k8 instance ---> click action ---> security ---> modify IAM role ---> select the IAM role
+		(k8Eksctl_Role) ---> update IAM role
+		
+
+		
+		Create eksctl cluster
+		-------------------------
+		Syntax to create the cluster is as below	
+			eksctl create cluster --name cluster-name  \
+				--region region-name \
+				--node-type instance-type \
+				--nodes-min 2 \
+				--nodes-max 2 \ 
+				--zones <AZ-1>,<AZ-2>\
+				--verbose 4
+				
+		Example which i have created is 
+			eksctl create cluster --name sktestK8  \
+				--region eu-north-1 \
+				--node-type t3.micro \
+				--nodes-min 1 \
+				--nodes-max 1 \ 
+				--zones eu-north-1a,eu-north-1b,eu-north-1c \ 
+				--verbose 4
+		( After 10 mins the success result will come with " EKS cluster "sktestK8" in "eu-north-1" region is ready " message )
+
+		To verify
+		------------
+		kubectl get svc  ---> it will give the cluster name and cluster ip 
+		kubectl get nodes  ---> it will give the nodes detail
+		
+		How to delete the cluster
+		--------------------------
+			eksctl delete cluster --name sktestK8 --region eu-north-1
 		
 		
 		
-		
-		
-			
