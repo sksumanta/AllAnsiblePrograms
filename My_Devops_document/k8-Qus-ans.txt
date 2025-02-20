@@ -1,0 +1,253 @@
+
+What is Kubernetes?
+	Kubernetes is an open-source platform to orchestrate containers across a cluster.
+
+What are the main components of Kubernetes?
+	Master Node: Manages the Kubernetes cluster. It runs the API server, scheduler, controller manager, etcd.
+	Worker Node: It contain Kubelet and Kube Proxy , Runs the application workloads, containers, and services.
+	
+	API Server: The entry point for interacting with the Kubernetes cluster.
+	Scheduler: Decides where to run pods based on resource availability.
+	Controller Manager: Ensures the cluster is running correctly by maintaining the desired state.
+	Etcd: Stores all the cluster's configuration data and state.
+	
+	Kubelet: Ensures the containers are running as expected on the nodes.
+	Kube Proxy: Manages network communication within and outside the cluster.
+
+Explain Kubernetes Architecture?
+	The manifest file submits to the API server on the master node. After that API server and 
+	the scheduler components on master nodes decides and deploys these pods onto appropriate 
+	worker nodes. Once pod get scheduled on a worker node in k8 cluster it go to pending state.
+	In pending state container image mention in pod manifest file get downloaded 
+	and start running the container. Once container is up and running pod go to running stage 
+	else go to failed stage. When pod achieve its goal get shut down and go to succeeded stage.
+	
+What is a Pod in Kubernetes?
+	Pod is the basic atomic unit of Kubernetes having a set of containers that serve a common purpose.
+	To get the pod status ---->  Kubectl get pod -o wide -n name_space
+	
+How to get the pod config detail in yaml format ?
+	Kubectl get pod  pod_name -o yaml
+
+What are the details you will get when execute Kubectl describe?
+	Syntax ---->  Kubectl   describe   pod   pod-name   
+	The Kubectl describe give list of events from the time pod is assigned to the node till the current status 
+	of the pod. As well as it gives label of the pod , node and ip address of the pod on which it is running. 
+
+How does Kubernetes handle container scaling?
+	In Kubernetes a Horizontal Pod Autoscaling is used to handle container scaling to fullfill the workload. 
+	
+	apiVersion: autoscaling/v2beta2
+	kind: HorizontalPodAutoscaler
+	metadata:
+	name: my-hpa
+	spec:
+	scaleTargetRef:
+	apiVersion: apps/v1
+	kind: Deployment # or StatefulSet, or ReplicaSet, depending on your workloa API serverd
+	name: my-deployment
+	minReplicas: 3
+	maxReplicas: 5
+	metrics:
+	- type: Resource
+	resource:
+	name: cpu
+	target:
+	type: Utilization
+	averageUtilization: 65
+
+What is Kubelet?
+	Kubelet is a core component of Kubernetes, which ensures the specified containers within the Pods are 
+	running and healthy. 
+	
+	apiVersion: apps/v1
+	kind: Deployment
+	metadata:
+	name: my-nginx
+	spec:
+	selector:
+	matchLabels:
+	app: nginx
+	template:
+	metadata:
+	labels:
+	app: nginx
+	spec:
+	containers:
+	- name: my-nginx
+	image: nginx:latest
+	resources:
+	limits:
+	memory: "125Mi"
+	cpu: "750m"
+	ports:
+	- containerPort: 80
+
+Explain the difference between a StatefulSet and a Deployment?
+	In Kubernetes, StatefulSets are used to manage stateful applications, where each identical pods 
+	needs to have a individual identity, stable network identity, and persistent storage.
+	Statefulset helpful in managing stateful applications that need persistent storage with a dependable network ID.
+	
+	apiVersion: apps/v1
+	kind: StatefulSet
+	metadata:
+	  name: example-statefulset
+	spec:
+	  serviceName: "example"
+	  replicas: 3
+	  selector:
+		matchLabels:
+		  app: example
+	  template:
+		metadata:
+		  labels:
+			app: example
+		spec:
+		  containers:
+		  - name: example-container
+			image: nginx:latest
+			ports:
+			- containerPort: 80
+	  volumeClaimTemplates:
+	  - metadata:
+		  name: data
+		spec:
+		  accessModes: [ "ReadWriteOnce" ]
+		  resources:
+			requests:
+			  storage: 1Gi
+	In this example, there are three identical Pods running the nginx container. They are configured in the 
+	same way, but each has its own persistent volume for storage, and each Pod has a unique network identity 
+	(example-statefulset-0, example-statefulset-1, etc.).
+	
+	In Kubernetes, Deployment controls identical pods deployment. Deployment help to control your application's 
+	state and ensure that the right number of pod replicas are always running.
+
+What is a Service in Kubernetes?
+	In Kubernetes  Services allow a stable network endpoint to expose Pods in a reliable way by ensuring 
+	consistent access, even Pods may be created or destroyed dynamically.
+						or
+	Services provide a fixed IP address and DNS name for pods. Service automatically load-balances 
+	traffic across the Pods and distribute the requests. 
+
+	apiVersion: v1
+	kind: Service
+	metadata:
+	name: my-service
+	spec:
+	selector:
+	Tomcat: deploymentapp
+	ports:
+	- protocol: TCP
+	port: 80
+	targetPort: 8080
+
+Kubernetes Concepts?
+
+	Pod: The smallest and simplest Kubernetes object. A Pod represents a set of running containers on the cluster.
+
+	Deployment: A resource used to manage stateless applications. It manages ReplicaSets, which in turn manage Pods.
+
+	ReplicaSet: Ensures that a specified number of pod replicas are running at any given time.
+
+	Service: A logical abstraction over a set of Pods that provides a stable endpoint for accessing them.
+
+	Namespace: A way to organize resources in a Kubernetes cluster into separate groups.
+
+	ConfigMap: A way to store configuration data that can be consumed by Pods.
+
+	Secret: A way to store sensitive information such as passwords, OAuth tokens, etc.
+
+	StatefulSet: Similar to Deployment but is used for managing stateful applications.
+
+	DaemonSet: Ensures that a copy of a Pod is running on every node (or some subset of nodes) in the cluster.
+
+	Job: A resource that creates one or more Pods and ensures they run to completion.
+
+
+Cluster Information & Management
+	kubectl cluster-info: Get cluster info.
+	kubectl get nodes: List all nodes in the cluster.
+	kubectl get namespaces: List namespaces.
+	kubectl config view: View Kubernetes config settings.
+	Pod & Resource Management
+	kubectl get pods: List all pods in the current namespace.
+	kubectl get pods --all-namespaces: List all pods across namespaces.
+	kubectl describe pod <pod-name>: Detailed information about a pod.
+	kubectl logs <pod-name>: View logs of a pod.
+	kubectl delete pod <pod-name>: Delete a specific pod.
+	kubectl exec -it <pod-name> -- <command>: Execute a command in a running pod.
+	kubectl run <pod-name> --image=<image>: Run a pod using a specific image.
+	kubectl apply -f <file>.yaml: Apply a resource defined in a YAML file.
+	kubectl delete -f <file>.yaml: Delete resources defined in a YAML file.
+Deployment & ReplicaSet Management
+	kubectl get deployments: List deployments.
+	kubectl describe deployment <deployment-name>: Detailed info on a deployment.
+	kubectl scale deployment <deployment-name> --replicas=<number>: Scale a deployment.
+	kubectl rollout status deployment/<deployment-name>: Check rollout status.
+	kubectl rollout undo deployment/<deployment-name>: Undo the last deployment.
+Service Management
+	kubectl get services: List services.
+	kubectl expose pod <pod-name> --port=<port>: Expose a pod as a service.
+	kubectl port-forward <pod-name> <local-port>:<remote-port>: Port-forward to a pod.
+Namespace Management
+	kubectl get namespaces: List namespaces.
+	kubectl create namespace <namespace-name>: Create a new namespace.
+	kubectl config set-context --current --namespace=<namespace>: Switch to a different namespace.
+Logs and Debugging
+	kubectl logs -f <pod-name>: Tail the logs of a pod.
+	kubectl logs <pod-name> -c <container-name>: Logs of a specific container in a pod.
+	kubectl describe <resource>: Show detailed information about any resource.
+Secrets & ConfigMaps
+	kubectl create secret generic <secret-name> --from-literal=<key>=<value>: Create a secret.
+	kubectl create configmap <configmap-name> --from-literal=<key>=<value>: Create a config map.
+	kubectl get secrets: List secrets in the current namespace.
+	kubectl get configmaps: List config maps.
+
+Define Kubernetes resources. Example for a pod:
+
+	apiVersion: v1
+	kind: Pod
+	metadata:
+	  name: example-pod
+	spec:
+	  containers:
+		- name: example-container
+		  image: nginx
+
+Setting resource limits and requests ensures your Pods don’t consume too many resources.
+
+	resources:
+	  requests:
+		memory: "64Mi"
+		cpu: "250m"
+	  limits:
+		memory: "128Mi"
+		cpu: "500m"
+Persistent Storage Volume: A persistent storage resource in Kubernetes. You define volumes in Pod specs.
+Example of a PersistentVolume:
+
+
+	apiVersion: v1
+	kind: PersistentVolume
+	metadata:
+	  name: example-pv
+	spec:
+	  capacity:
+		storage: 1Gi
+	  accessModes:
+		- ReadWriteOnce
+	  hostPath:
+		path: /mnt/data
+
+Helm is a Kubernetes package manager that simplifies deployments. Key commands:
+
+	helm install <release-name> <chart-name>: Install a Helm chart.
+	helm list: List all Helm releases.
+	helm upgrade <release-name> <chart-name>: Upgrade a release.
+	helm uninstall <release-name>: Uninstall a Helm release.
+Other Useful Commands
+	kubectl get all: Show all resources in a namespace.
+	kubectl top pod: Show resource usage (CPU/Memory) of Pods.
+	kubectl top node: Show resource usage (CPU/Memory) of Nodes.
+
