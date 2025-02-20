@@ -170,7 +170,7 @@ Cluster Information & Management
 	kubectl get nodes: List all nodes in the cluster.
 	kubectl get namespaces: List namespaces.
 	kubectl config view: View Kubernetes config settings.
-	Pod & Resource Management
+Pod & Resource Management
 	kubectl get pods: List all pods in the current namespace.
 	kubectl get pods --all-namespaces: List all pods across namespaces.
 	kubectl describe pod <pod-name>: Detailed information about a pod.
