@@ -1,0 +1,630 @@
+What is Terraform and how does it work?
+----------------------------------------------
+Terraform is an open-source Infrastructure as Code (IaC) tool use to define and provision infrastructure.
+
+	Write: Define resources in .tf files.
+	Init: terraform init to initialize the working directory.
+	Plan: terraform plan to preview changes.
+	Apply: terraform apply to provision resources.
+	Destroy: terraform destroy to remove all managed resources.
+	
+What are Terraform providers?
+----------------------------------------------
+Providers are plugins that allow Terraform to interact with APIs (like AWS, Azure, GCP, etc.)
+	provider "aws" {
+		region = "us-east-1"			In this configures Terraform to use AWS in the us-east-1 region.
+	}
+
+What is the difference between terraform apply and terraform plan?
+----------------------------------------------
+terraform plan --> Shows the execution plan. Before implementing we can see the changes.
+terraform apply --> Executes the changes 
+
+How do you handle sensitive data in Terraform?
+----------------------------------------------
+step - 1
+========
+Encrypt the .tfvars file even if the file dont have sensitive data.
+	gpg --output   secrets.tfvars.gpg   --encrypt --recipient <recipient_email_or_key_id>   secrets.tfvars
+
+Decrypt during runtime (e.g., in CI/CD or manually)
+	gpg --quiet --batch --yes --decrypt --output secrets.tfvars secrets.tfvars.gpg
+	terraform  apply   -var-file=secrets.tfvars
+	rm -f secrets.tfvars  	------>   delete it after use
+	
+step - 2
+========
+Use   sensitive = true    for variables.
+
+	vi secrets.tfvars
+	
+		db_password = "supersecretpassword123"
+		
+	encrypt this file as above
+	
+	vi variables.tf
+		
+		variable "db_password" {
+			type      = string
+			sensitive = true
+		}
+
+	vi main.tf  -----> where we can use the variable
+		
+		resource "aws_db_instance" "example" {
+			identifier        = "example-db"
+			engine            = "mysql"
+			instance_class    = "db.t3.micro"
+			allocated_storage = 20
+			username          = "admin"
+			password          = var.db_password   -------------->  using the variable here
+			skip_final_snapshot = true
+		}
+ 
+	decrypt the file as above and apply
+	
+What is Terraform state and why is it important?
+----------------------------------------------
+Terraform state (terraform.tfstate) keeps track of the infrastructure which Terraform manages.
+This file is automatically created and updated by Terraform every time you run   terraform apply.
+
+terraform.tfstate contains:
+	The list of all resources managed by Terraform
+	Resource metadata (like IDs, dependencies)
+	Output values
+	Module paths
+	Provider-specific information
+
+Terraform uses terraform.tfstate  file to:
+	Compare your actual infrastructure with your configuration (.tf files)
+	Determine what needs to be created, updated, or destroyed
+	
+Best practice ------>   Store terraform.tfstate file remotely (e.g., in S3 with DynamoDB locking) as below.
+
+	terraform {
+		backend "s3" {
+			bucket         = "my-terraform-state"
+			key            = "dev/terraform.tfstate"
+			region         = "us-east-1"
+			dynamodb_table = "terraform-lock"
+		}
+	}
+
+
+How can you share data between modules?
+----------------------------------------------
+Use outputs as input we can share data between modules.
+
+	my-tf-project/
+		├── main.tf
+		├── modules/
+		│   ├── network/			Lets Share VPC ID from network module to compute module
+		│   │   ├── main.tf
+		│   │   └── outputs.tf
+		│   └── compute/
+		│       ├── main.tf
+		│       └── variables.tf
+		├── outputs.tf
+		└── variables.tf
+	
+	vi modules/network/main.tf
+	==========================
+		resource "aws_vpc" "main" {
+			cidr_block = "10.0.0.0/16"
+			tags = {
+				Name = "main-vpc"
+			}
+		}
+	vi modules/network/outputs.tf
+	=============================
+	output "vpc_id"{
+		value = aws_vpc.main.id
+	}
+	
+	vi modules/compute/variables.tf
+	================================
+	variable "vpc_id" {
+		type = string
+	}
+	vi modules/compute/main.tf
+	===============================
+		resource "aws_subnet" "main" {
+			vpc_id            = var.vpc_id
+			cidr_block        = "10.0.1.0/24"
+			availability_zone = "us-east-1a"
+
+			tags = {
+				Name = "main-subnet"
+			}
+		}
+	vi main.tf
+	===========
+		module "network" {
+			source = "./modules/network"
+		}
+		
+		module "compute" {
+			source = "./modules/compute"
+			vpc_id = module.network.vpc_id  # <-- Passing output as input
+		}
+		
+How do you manage different environments (dev, staging, prod)?
+-------------------------------------------------------------
+step 1 
+=======
+	Use separate workspace for each environments   as below
+	
+			terraform workspace new dev
+			terraform workspace select dev
+			
+	do same for stage and prod
+			
+Step 2
+=======
+	Use different .tfvars files and apply that
+	
+		terraform apply -var-file="dev.tfvars"
+		
+Step 3 
+=======
+	Modularize the infrastructure
+			my_tf_project/
+				├── modules/               # Reusable modules
+				│   └── network/
+				│       └── main.tf
+				│       └── variables.tf
+				│       └── outputs.tf
+				│   └── compute/
+				│       └── main.tf
+				│       └── variables.tf
+				│       └── outputs.tf
+				├── environments/
+				│   ├── dev/
+				│   │   └── main.tf
+				│   │   └── variables.tf
+				│   │   └── terraform.tfvars
+				│   ├── staging/
+				│   │   └── main.tf
+				│   │   └── variables.tf
+				│   │   └── terraform.tfvars
+				│   └── prod/
+				│       └── main.tf
+				│       └── variables.tf
+				│       └── terraform.tfvars
+				└── backend.tf 			# Optional: shared or env-specific remote state config
+
+
+Configure dev environment in terraform using modules? 
+-------------------------------------------------------
+		my_tf_envs/
+			├── modules/
+			│   ├── network/
+			│   │   ├── main.tf
+			│   │   ├── variables.tf
+			│   │   └── outputs.tf
+			│   └── compute/
+			│       ├── main.tf
+			│       ├── variables.tf
+			│       └── outputs.tf
+			└── environments/
+				└── dev/
+					├── main.tf
+					├── variables.tf
+					├── terraform.tfvars
+					└── backend.tf
+		
+	vi modules/network/main.tf
+	==========================
+		resource "aws_vpc" "main" {
+			cidr_block = var.cidr_block
+			tags = {
+				Name = "${var.env}-vpc"
+			}
+		}
+		
+	vi modules/network/variables.tf
+	=================================
+		variable "cidr_block" {}
+		variable "env" {}
+		
+	vi modules/network/outputs.tf
+	=================================
+		output "vpc_id" {
+			value = aws_vpc.main.id
+		}
+	
+	vi modules/compute/main.tf
+	=================================
+		resource "aws_instance" "app" {
+			ami           = var.ami
+			instance_type = var.instance_type
+			count         = var.instance_count
+			
+			tags = {
+				Name = "${var.env}-instance"
+			}
+		}
+	
+	vi modules/compute/variables.tf
+	==================================
+		variable "ami" {}
+		variable "instance_type" {}
+		variable "instance_count" {}
+		variable "env" {}
+		
+	vi modules/compute/outputs.tf
+	===================================
+		output "instance_ids" {
+			value = aws_instance.app[*].id
+		}
+	
+	vi environments/dev/main.tf
+	===================================
+		provider "aws" {
+			region = var.aws_region
+		}
+			
+		module "network" {
+			source     = "../../modules/network"
+			cidr_block = var.network_cidr
+			env        = var.env
+		}
+			
+		module "compute" {
+			source         = "../../modules/compute"
+			ami            = var.ami
+			instance_type  = var.instance_type
+			instance_count = var.instance_count
+			env            = var.env
+		}
+	
+	vi environments/dev/variables.tf
+	=======================================
+		variable "aws_region" {}
+		variable "env" {}
+		variable "network_cidr" {}
+		variable "ami" {}
+		variable "instance_type" {}
+		variable "instance_count" {}
+		
+	vi environments/dev/terraform.tfvars
+	==========================================
+		aws_region       = "us-east-1"
+		env              = "dev"
+		network_cidr     = "10.0.0.0/16"
+		ami              = "ami-0c55b159cbfafe1f0"  # Replace with a real AMI ID
+		instance_type    = "t3.micro"
+		instance_count   = 1
+		
+	vi environments/dev/backend.tf
+	=========================================
+		terraform {
+			backend "s3" {
+				bucket = "my-terraform-state"
+				key    = "dev/terraform.tfstate"
+				region = "us-east-1"
+			}
+		}
+		
+What is a Terraform module?
+-------------------------------------------
+In Terraform module is a reusable container for multiple resources used together.
+In AWS (VPC, EC2, S3, RDS, EKS etc.) are the modules 
+
+	module "vpc" {
+		source = "terraform-aws-modules/vpc/aws"
+		name   = "my-vpc"
+		cidr   = "10.0.0.0/16"
+	}
+	
+What happens if your state file gets corrupted or deleted?
+----------------------------------------------------------------
+If it's corrupted: try   terraform state pull   or recover from backup.
+So it is advisable to keep    remote state     file with versioning.
+
+if 	  state    file get deleted then Terraform loses track of resources
+
+How to share Terraform Remote State ?
+----------------------------------------------------------------
+	Generally Terraform remote state  is stored in a backend like Amazon S3, Terraform Cloud.
+Using a    data "terraform_remote_state"    block we can reuse it.
+
+Step 1  --> Store the State in a Remote Backend
+========
+	# main.tf in project-A
+		terraform {
+			backend "s3" {
+				bucket         = "my-terraform-state"
+				key            = "project-a/terraform.tfstate"
+				region         = "us-west-2"
+				dynamodb_table = "terraform-locks"
+				encrypt        = true
+			}
+		}
+
+	Run 	terraform init 		to configure the backend
+	
+Step 2 --> Expose Outputs in the Producing Module
+==========
+	# outputs.tf in  project-A
+		output "vpc_id" {
+			value = aws_vpc.main.id
+		}
+
+Step 3 --> Reference the Remote State in Another Project
+==========
+	use the terraform_remote_state data source in project-B
+	
+	# project-b/main.tf
+		data "terraform_remote_state" "project_a" {
+			backend = "s3"
+			config = {
+				bucket         = "my-terraform-state"
+				key            = "project-a/terraform.tfstate"
+				region         = "us-west-2"
+			}
+		}
+
+		resource "aws_instance" "example" {
+			ami           = "ami-0abcdef1234567890"
+			instance_type = "t2.micro"
+			subnet_id     = data.terraform_remote_state.project_a.outputs.vpc_id
+		}
+
+Then run terraform init and terraform apply.
+
+
+Explain lifecycle rules in Terraform?
+------------------------------------------------
+	In Terraform,   lifecycle   is a meta-argument within a resource block which tale  
+Terraform how to handel the changes to that resource. 
+
+	lifecycle Option						Purpose
+create_before_destroy			Ensures the new resource is created before the old one is destroyed.
+prevent_destroy					Prevents the resource from being accidentally destroyed.
+ignore_changes					Ignores changes to specific attributes during terraform apply.
+replace_triggered_by			Forces replacement if another resource/input changes (v1.2+).
+
+
+	vi main.tf
+			
+resource "aws_instance" "example" {
+  ami           = "ami-0abcdef1234567890"
+  instance_type = "t2.micro"
+  
+  tags{
+	Name = "MyWebServer"
+    Environment = "Dev"
+  }
+
+  lifecycle {
+    create_before_destroy = true
+    prevent_destroy       = true
+    ignore_changes        = [tags, instance_type ]
+	replace_triggered_by = [ var.force_recreate_flag ]
+  }
+}
+
+	vi variables.tf
+	
+variable "force_recreate_flag" {
+  description = "A dummy value to force resource recreation when changed."
+  type        = string
+  default     = "initial"
+}
+	
+we can create   terraform.tfvars  file as below or can pass the    force_recreate_flag   in command line
+	
+	vi terraform.tfvars
+		
+force_recreate_flag = "change-1"
+
+	terraform  plan 
+	terraform apply
+	
+from command line          terraform apply -var="force_recreate_flag=force-2025-07-29" 
+
+
+
+How to deploy EC2 with Terraform?
+--------------------------------------------------------
+	provider "aws" {
+		region = "us-east-1"
+	}
+
+	resource "aws_instance" "web" {
+		ami           = "ami-0c55b159cbfafe1f0"
+		instance_type = "t2.micro"
+		key_name      = "my-key"
+
+		tags = {
+			Name = "Terraform-Web"
+		}
+	}
+	
+execute below command
+
+		terraform init
+		terraform plan
+		terraform apply
+		
+		
+		
+What is terraform import and when would you use it?
+---------------------------------------------------------
+	When you already have an EC2 instance running outside Terraform (e.g. created manually or by another system), 
+and you want to manage it with Terraform, you don’t need to recreate it. Instead, you can "map" or import it into 
+Terraform.
+
+How to perform terraform import?
+---------------------------------------
+ step 1 -->  Write a basic provider configuration and blank resource block in your Terraform code:
+ 
+	provider "aws" {
+		region = "us-west-2" # Replace with your region
+	}
+
+	resource "aws_instance" "web" {
+				# the block is blank 
+	}
+ step 2 --> Find your instance ID from the AWS Console or CLI:
+ 
+	aws ec2 describe-instances --query "Reservations[*].Instances[*].InstanceId" --output text
+
+ Step 3 --> Then import instance ID  into Terraform
+ 
+	terraform import    aws_instance.web    i-0123456789abcdef0
+ 
+ Step 4 --> Run terraform plan to Inspect What’s Missing
+ 
+	terraform plan
+ 
+ Step 5 --> Manually update your main.tf by copying the attributes from the plan output 
+		resource "aws_instance" "web" {
+			ami           = "ami-0abcdef1234567890"
+			instance_type = "t3.micro"
+
+			subnet_id              = "subnet-0a12b345c678de9f0"
+			vpc_security_group_ids = ["sg-0123abc"]
+
+			key_name      = "my-key"
+			
+			
+			tags = {
+				Name = "MyImportedInstance"
+			}
+
+			# Add other attributes seen in the terraform plan output
+			
+			root_block_device {
+				volume_type           = "gp3"	##### EBS volume type 
+				volume_size           = 100
+				delete_on_termination = true
+				encrypted             = true
+			}
+			# think this part we added after cheking the plan 
+		}
+ 
+ step 6 --> execute terraform state command to see all the attributes
+ 
+	terraform state show    aws_instance.web
+	
+ Step 7 --> once Validate and then Apply
+	
+	terraform plan		---> plan shows no changes, that means you’ve correctly reconstructed the config
+	terraform apply
+	
+What is depends_on and how you can use it?
+------------------------------------------------------
+	Terraform normally auto-detects dependencies based on how resources reference each other.
+But sometime we need to specify explicit dependency using  depends_on
+When the   depends_on  meta-argument  is used it ensure one resource/module is created or destroyed before another.
+
+	Example : create an EC2 Instance That Depends on IAM Role (   resource dependency example )
+	==========================================================
+		provider "aws" {
+			region = "us-west-2"
+		}
+
+		resource "aws_iam_role" "example" {
+			name = "example-role"
+
+			assume_role_policy = jsonencode({
+				Version = "2012-10-17",
+				Statement = [{
+					Action = "sts:AssumeRole",
+					Effect = "Allow",
+				Principal = {
+					Service = "ec2.amazonaws.com"
+				}
+				}]
+			})
+		}
+
+		resource "aws_instance" "example" {
+			ami   = "ami-0c55b159cbfafe1f0" # Example AMI
+			instance_type = "t2.micro"
+
+			# Explicit dependency even though there's no direct reference
+			depends_on = [aws_iam_role.example]
+		}
+		
+🔍
+	Example : Module dependency
+	==============================
+		module "network" {
+			source = "./modules/vpc"
+		}
+
+		module "compute" {
+			source = "./modules/ec2"
+			depends_on = [module.network]
+		}
+		
+What is the use of terraform validate?
+---------------------------------------------
+	The terraform validate command is used to check whether your Terraform configuration files are syntactically and structurally valid.
+so we should execute  terraform validate  before exeuting  plan and apply
+
+What is the Difference: count vs for_each
+------------------------------------------------
+	count --> Count takes numenrical value and create identical resources untill the numenrical value reached.
+	for_each --> for_each  takes key value pair and iterat using those key-value pair to create/delete the resource.
+	
+	Example with count  -->  S3 bucket using count
+	======================
+	vi variables.tf
+		
+		variable "bucket_prefix" {
+				type    = string
+				default = "my-bucket"
+		}
+	
+	vi main.tf
+		
+		resource "aws_s3_bucket" "example" {
+			count  = 3
+			bucket = "${var.bucket_prefix}-${count.index}"
+			acl    = "private"
+		}
+		
+	terraform apply will create the below resource
+	
+		my-bucket-0
+		my-bucket-1
+		my-bucket-2
+	
+	Example with for_each  -->  S3 bucket using count
+	======================
+	vi variables.tf
+		
+		variable "bucket_map" {
+			type = map(string)
+			default = {
+				dev   = "dev-bucket"
+				prod  = "prod-bucket"
+				stage = "stage-bucket"
+			}
+		}
+	
+	vi main.tf
+	
+		resource "aws_s3_bucket" "example" {
+			for_each = var.bucket_map
+
+			bucket = each.value
+			acl    = "private"
+
+			tags = {
+				Environment = each.key
+				Name        = each.value
+			}
+		}
+		
+	terraform apply will create the below resource
+	
+		dev-bucket   → tagged as Environment = dev
+		prod-bucket  → tagged as Environment = prod
+		stage-bucket → tagged as Environment = stage
+		
+		

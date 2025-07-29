@@ -44,7 +44,7 @@ How does Kubernetes handle container scaling?
 	spec:
 	scaleTargetRef:
 	apiVersion: apps/v1
-	kind: Deployment # or StatefulSet, or ReplicaSet, depending on your workloa API serverd
+	kind: Deployment # or StatefulSet, or ReplicaSet, depending on your workload API serverd
 	name: my-deployment
 	minReplicas: 3
 	maxReplicas: 5
@@ -63,25 +63,25 @@ What is Kubelet?
 	apiVersion: apps/v1
 	kind: Deployment
 	metadata:
-	name: my-nginx
+		name: my-nginx
 	spec:
-	selector:
-	matchLabels:
-	app: nginx
-	template:
-	metadata:
-	labels:
-	app: nginx
-	spec:
-	containers:
-	- name: my-nginx
-	image: nginx:latest
-	resources:
-	limits:
-	memory: "125Mi"
-	cpu: "750m"
-	ports:
-	- containerPort: 80
+		selector:
+			matchLabels:
+				app: nginx
+		template:
+			metadata:
+				labels:
+					app: nginx
+			spec:
+				containers:
+				- name: my-nginx
+				  image: nginx:latest
+			resources:
+				limits:
+					memory: "125Mi"
+					cpu: "750m"
+					ports:
+					- containerPort: 80
 
 Explain the difference between a StatefulSet and a Deployment?
 	In Kubernetes, StatefulSets are used to manage stateful applications, where each identical pods 
@@ -170,7 +170,7 @@ Cluster Information & Management
 	kubectl get nodes: List all nodes in the cluster.
 	kubectl get namespaces: List namespaces.
 	kubectl config view: View Kubernetes config settings.
-Pod & Resource Management
+	Pod & Resource Management
 	kubectl get pods: List all pods in the current namespace.
 	kubectl get pods --all-namespaces: List all pods across namespaces.
 	kubectl describe pod <pod-name>: Detailed information about a pod.
